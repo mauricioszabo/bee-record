@@ -1,10 +1,31 @@
-# bee-record
+# Bee Record
+_Where "ActiveRecord" encounters "HoneySQL"..._
 
-A Clojure library designed to ... well, that part is up to you.
+Bee Record is an wrapper to HoneySQL. It maps Clojure maps to something resembling "records" from the ActiveRecord patterns, and creates some functions to allow us to manipulate these records in a simple way.
+
+Heavily inspired by Ruby's ActiveRecord (and Sequel), it allows us to generate queries, to query things, and to update records. Different from ActiveRecord and Sequel, it has a separate API to query things and to update things.
 
 ## Usage
 
-FIXME
+You first must create a mapping. It is just a Clojure map, but as we can forget to pass some fields, there's a helper function that helps us to generate the correct map:
+
+```clojure
+(require '[bee-record.sql :as sql])
+(def user
+  (sql/model {:pk :id
+              :table "users"
+              :fields [:id :name :age]}))
+```
+
+Then, we can query things:
+
+```clojure
+(-> user
+    (sql/select [:name])
+    (sql/distinct)
+    (sql/where [:= :id 20])
+    (sql/query db))
+```
 
 ## License
 
