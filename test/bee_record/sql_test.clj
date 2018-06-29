@@ -26,4 +26,11 @@
     (-> users (sql/select [:name :age]) as-sql)
     => [(str "SELECT `users`.`name` AS `users/name`, "
              "`users`.`age` AS `users/age` "
+             "FROM `users`")])
+
+  (fact "will add fields to SELECT"
+    (-> users (sql/select+ [:name]) as-sql)
+    => [(str "SELECT `users`.`id` AS `users/id`, "
+             "`users`.`first_name` AS `users/first-name`, "
+             "`users`.`name` AS `users/name` "
              "FROM `users`")]))

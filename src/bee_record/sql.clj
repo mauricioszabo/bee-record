@@ -11,7 +11,7 @@
                    (fn [field] [(keyword (str table "." (str/replace (name field) #"-" "_")))
                                 (keyword (str table "/" (name field)))])
                    (fn [field] [(keyword (str/replace (name field) #"-" "_")) field]))]
-    (map to-field fields)))
+    (mapv to-field fields)))
 
 (defn model [{:keys [table pk fields] :as definition}]
   (assoc definition
@@ -25,3 +25,7 @@
 
 (defn select [model fields]
   (assoc model :select (fields-to model fields)))
+
+(defn select+ [model fields]
+  (let [new-fields (fields-to model fields)]
+    (update model :select #(vec (concat % new-fields)))))
