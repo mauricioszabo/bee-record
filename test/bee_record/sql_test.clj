@@ -33,4 +33,18 @@
     => [(str "SELECT `users`.`id` AS `users/id`, "
              "`users`.`first_name` AS `users/first-name`, "
              "`users`.`name` AS `users/name` "
-             "FROM `users`")]))
+             "FROM `users`")])
+
+  (fact "will add WHERE clauses"
+    (-> users (sql/where '(:= :id 1)) as-sql)
+    => (just [#"WHERE `users`\.`id` = ?" 1])))
+
+(facts "about WHERE clauses"
+  (tabular
+   (fact "normalizes WHERE clauses"
+     (-> users (sql/where ?where) as-sql first) => ?result)
+   ?where                               ?result
+   [:= :name :foo]                      #"`users`.`name` = `users`.`foo`"
+   [:and [:= :name "boo"] [:= :id 10]]  #"`users`.`name` = \? AND `users`.`id` = \?"
+   '(:= :name :foo)                     #"`users`.`name` = `users`.`foo`"
+   {:name 10}                           #"`users`.`name` = ?"))
