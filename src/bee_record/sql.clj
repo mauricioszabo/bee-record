@@ -1,4 +1,5 @@
 (ns bee-record.sql
+  (:refer-clojure :exclude [:select])
   (:require [honeysql.core :as honey]
             [clojure.string :as str]))
 
@@ -21,3 +22,6 @@
   (honey/format model
                 :quoting @quoting
                 :allow-dashed-names? true))
+
+(defn select [model fields]
+  (assoc model :select (fields-to model fields)))
