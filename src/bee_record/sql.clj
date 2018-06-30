@@ -13,7 +13,7 @@
   (keyword (str table "/" (name field))))
 
 (defn- as-table [model]
-  (or (:table model) (-> model :from first)))
+  (name (or (:table model) (-> model :from first))))
 
 (defn- fields-to [model fields]
   (let [table (as-table model)
@@ -25,7 +25,7 @@
 
 (defn model [{:keys [table pk fields] :as definition}]
   (assoc definition
-         :from [(keyword table)]
+         :from [table]
          :select (fields-to definition fields)))
 
 (defn to-sql [model]
@@ -41,13 +41,18 @@
     (update model :select #(vec (concat % new-fields)))))
 
 (defn- normalize-field [model field]
-  (let [namespaced? #(re-find #"/" (name %))
-        tabled? #(re-find #"\." (name %))]
-    (if (keyword? field)
-      (cond-> field
-              (namespaced? field) (str/replace #"/" ".")
-              (not (tabled? field)) (->> (as-sql-field (as-table model))))
-      field)))
+    (cond
+      (not (keyword? field)) field
+
+      (re-find #"\." (name field)) field
+
+      (namespace field) (-> field
+                            (str/replace #"/" ".")
+                            (str/replace #"^:" "")
+                            (str/replace #"-" "_")
+                            keyword)
+
+      :else (as-sql-field (as-table model) field)))
 
 (defn- normalize-fields [model [op & rest]]
   (->> rest
@@ -63,9 +68,31 @@
          (cons :and)
          vec)))
 
+(defn- norm-conditions [model comparision]
+  (walk/prewalk #(cond->> %
+                          (or (list? %) (vector? %)) (normalize-fields model)
+                          (map? %) (normalize-map model))
+                comparision))
+
 (defn where [model comparision]
-  (let [norm-where (walk/prewalk #(cond->> %
-                                           (or (list? %) (vector? %)) (normalize-fields model)
-                                           (map? %) (normalize-map model))
-                                 comparision)]
-    (assoc model :where norm-where)))
+  (assoc model :where (norm-conditions model comparision)))
+
+(def ^:private joins {:inner :join
+                      :left :left-join
+                      :right :right-join})
+(defn- normalize-join-map [table other conds]
+  (->> conds
+       (map (fn [[k v]] [(normalize-field {:table table} k)
+                         (normalize-field {:table other} v)]))
+       (into {})
+       (norm-conditions {})))
+
+(defn join [model kind foreign-table conditions]
+  (let [join-model {(joins kind)
+                    [foreign-table
+                     (if (map? conditions)
+                       (normalize-join-map (:table model) foreign-table conditions)
+                       (norm-conditions model conditions))]}]
+    (merge-with #(vec (concat %1 %2))
+                model
+                join-model)))
