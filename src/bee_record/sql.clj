@@ -96,3 +96,7 @@
     (merge-with #(vec (concat %1 %2))
                 model
                 join-model)))
+
+(defn association-join [model kind association]
+  (let [specs (get-in model [:associations association])]
+    (join model kind (-> specs :model as-table keyword) (:on specs))))
