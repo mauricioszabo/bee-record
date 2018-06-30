@@ -88,21 +88,34 @@
        (norm-conditions {})))
 
 (defn join [model kind foreign-table conditions]
-  (let [join-model {(joins kind)
+  (let [ft-name (cond-> foreign-table (coll? foreign-table) last)
+        join-model {(joins kind)
                     [foreign-table
                      (if (map? conditions)
-                       (normalize-join-map (:table model) foreign-table conditions)
+                       (normalize-join-map (:table model) ft-name conditions)
                        (norm-conditions model conditions))]}]
     (merge-with #(vec (concat %1 %2))
                 model
                 join-model)))
+
+(defn- table-to-assoc-join [model]
+  (let [complex-sql (or (-> model :from count (> 1))
+                        (:where model)
+                        (:join model)
+                        (:group-by model)
+                        (:having model)
+                        (:union model)
+                        (:union-all model))]
+    (if complex-sql
+      [model (:table model)]
+      (:table model))))
 
 (defn association-join
   ([model kind association] (association-join model kind association {}))
 
   ([model kind association opts]
    (let [specs (get-in model [:associations association])
-         foreign-model (:model specs)]
+         foreign-model (get opts :with-model (:model specs))]
      (cond-> model
              (:include-fields opts) (select+ (:select foreign-model))
-             :always (join kind (-> foreign-model as-table keyword) (:on specs))))))
+             :always (join kind (table-to-assoc-join foreign-model) (:on specs))))))

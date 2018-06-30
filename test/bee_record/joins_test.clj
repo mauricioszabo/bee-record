@@ -37,14 +37,21 @@
                       "INNER JOIN `perms` ON (`perms`.`role_id` = `roles`.`id`)"))))
 
 (facts "creating joins from associations"
-  (fact "will generate a join"
+  (fact "generates a join"
     (-> users
         (sql/association-join :inner :roles)
         as-sql first)
     => (contains "INNER JOIN `roles` ON (`users`.`id` = `roles`.`user_id`)"))
 
-  (fact "will include associated fields if we ask for it"
+  (fact "includes associated fields if we ask for it"
     (-> users
         (sql/association-join :inner :roles {:include-fields true})
         as-sql first)
-    => #"SELECT.*`roles`.`name`.*INNER JOIN `roles`"))
+    => #"SELECT.*`roles`.`name`.*INNER JOIN `roles`")
+
+  (fact "allows overriding the model"
+    (-> users
+        (sql/association-join :inner :roles
+                              {:with-model (sql/where roles {:name "admin"})})
+        as-sql first)
+    => #"INNER JOIN \(SELECT `roles`.`id`.*WHERE.*\) `roles` ON"))
