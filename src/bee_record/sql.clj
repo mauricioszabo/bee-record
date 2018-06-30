@@ -21,7 +21,7 @@
                    (fn [field] [(as-sql-field table field)
                                 (as-namespaced-field table field)])
                    (fn [field] [(keyword (str/replace (name field) #"-" "_")) field]))]
-    (mapv to-field fields)))
+    (mapv #(cond-> % (not (coll? %)) to-field) fields)))
 
 (defn model [{:keys [table pk fields] :as definition}]
   (assoc definition
@@ -97,6 +97,12 @@
                 model
                 join-model)))
 
-(defn association-join [model kind association]
-  (let [specs (get-in model [:associations association])]
-    (join model kind (-> specs :model as-table keyword) (:on specs))))
+(defn association-join
+  ([model kind association] (association-join model kind association {}))
+
+  ([model kind association opts]
+   (let [specs (get-in model [:associations association])
+         foreign-model (:model specs)]
+     (cond-> model
+             (:include-fields opts) (select+ (:select foreign-model))
+             :always (join kind (-> foreign-model as-table keyword) (:on specs))))))

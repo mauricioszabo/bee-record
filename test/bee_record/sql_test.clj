@@ -24,6 +24,10 @@
              "`users`.`age` AS `users/age` "
              "FROM `users`")])
 
+  (fact "will alias in SELECT fields"
+    (-> users (sql/select [[:name :n]]) as-sql)
+    => ["SELECT `name` AS `n` FROM `users`"])
+
   (fact "will add fields to SELECT"
     (-> users (sql/select+ [:name]) as-sql)
     => [(str "SELECT `users`.`id` AS `users/id`, "

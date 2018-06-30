@@ -41,4 +41,10 @@
     (-> users
         (sql/association-join :inner :roles)
         as-sql first)
-    => (contains "INNER JOIN `roles` ON (`users`.`id` = `roles`.`user_id`)")))
+    => (contains "INNER JOIN `roles` ON (`users`.`id` = `roles`.`user_id`)"))
+
+  (fact "will include associated fields if we ask for it"
+    (-> users
+        (sql/association-join :inner :roles {:include-fields true})
+        as-sql first)
+    => #"SELECT.*`roles`.`name`.*INNER JOIN `roles`"))
