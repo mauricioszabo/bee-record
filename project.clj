@@ -5,4 +5,5 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [honeysql "0.9.2"]]
-  :profiles {:dev {:dependencies [[midje "1.9.1"]]}})
+  :profiles {:dev {:dependencies [[midje "1.9.1"]
+                                  [org.hsqldb/hsqldb "2.4.0"]]}})
