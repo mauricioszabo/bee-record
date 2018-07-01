@@ -110,12 +110,17 @@
       [model (:table model)]
       (:table model))))
 
-(defn association-join
-  ([model kind association] (association-join model kind association {}))
+(defn- assoc-join [model kind association opts]
+  (let [specs (get-in model [:associations association])
+        foreign-model (get opts :with-model (:model specs))]
+    (cond-> model
+            (:include-fields opts) (select+ (:select foreign-model))
+            :always (join kind (table-to-assoc-join foreign-model) (:on specs)))))
 
-  ([model kind association opts]
-   (let [specs (get-in model [:associations association])
-         foreign-model (get opts :with-model (:model specs))]
-     (cond-> model
-             (:include-fields opts) (select+ (:select foreign-model))
-             :always (join kind (table-to-assoc-join foreign-model) (:on specs))))))
+(defn association-join [model kind associations]
+  (let [treat-map (fn [m [assoc val]]
+                    (assoc-join m kind assoc (:opts val)))]
+    (cond
+      (keyword? associations) (assoc-join model kind associations {})
+      (map? associations) (reduce treat-map  model associations)
+      (coll? associations) (reduce #(assoc-join %1 kind %2 {}) model associations))))

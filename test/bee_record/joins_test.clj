@@ -3,6 +3,11 @@
             [bee-record.test-helper :refer :all]
             [midje.sweet :refer :all]))
 
+(def accounts
+  (sql/model {:table :accs
+              :pk :id
+              :fields [:id :login :pass]}))
+
 (def roles
   (sql/model {:table :roles
               :pk :id
@@ -13,7 +18,9 @@
               :pk :id
               :fields [:id :name]
               :associations {:roles {:model roles
-                                     :on {:id :user-id}}}}))
+                                     :on {:id :user-id}}
+                             :accs {:model accounts
+                                    :on {:id :user-id}}}}))
 
 (facts "creating joins without associations"
   (fact "will left join"
@@ -43,15 +50,21 @@
         as-sql first)
     => (contains "INNER JOIN `roles` ON (`users`.`id` = `roles`.`user_id`)"))
 
+  (fact "will join multiple associations"
+    (-> users
+        (sql/association-join :inner [:roles :accs])
+        as-sql first)
+    => #"INNER JOIN `roles`.*INNER JOIN `accs`")
+
   (fact "includes associated fields if we ask for it"
     (-> users
-        (sql/association-join :inner :roles {:include-fields true})
+        (sql/association-join :inner {:roles {:opts {:include-fields true}}})
         as-sql first)
     => #"SELECT.*`roles`.`name`.*INNER JOIN `roles`")
 
   (fact "allows overriding the model"
     (-> users
-        (sql/association-join :inner :roles
-                              {:with-model (sql/where roles {:name "admin"})})
+        (sql/association-join :inner {:roles {:opts {:with-model
+                                                     (sql/where roles {:name "admin"})}}})
         as-sql first)
     => #"INNER JOIN \(SELECT `roles`.`id`.*WHERE.*\) `roles` ON"))
