@@ -130,9 +130,11 @@
 
 (defn association-join [model kind associations]
   (let [norm-map #(->> %
-                       (map (fn [[k v]] [k (if (keyword? v)
-                                             {v {:opts {}}}
-                                             v)]))
+                       (map (fn [[k v]]
+                              [k (cond
+                                   (keyword? v) {v {:opts {}}}
+                                   (map? v) v
+                                   :else (->> v (map (fn [v] [v {}])) (into {})))]))
                        (into {}))]
     (cond
       (keyword? associations) (assoc-join model kind associations {})

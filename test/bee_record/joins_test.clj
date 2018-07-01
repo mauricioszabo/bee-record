@@ -84,6 +84,15 @@
                         "INNER JOIN `perms` "
                         "ON \\(`roles`.`id` = `perms`.`role_id`\\)")))
 
+  (fact "create joins for nested associations with vectors"
+    (-> users
+        (sql/association-join :inner {:roles [:perms]})
+        as-sql first)
+    => (re-pattern (str "INNER JOIN `roles` "
+                        "ON \\(`users`.`id` = `roles`.`user_id`\\).*"
+                        "INNER JOIN `perms` "
+                        "ON \\(`roles`.`id` = `perms`.`role_id`\\)")))
+
   (fact "create different joins for nested associations"
     (-> users
         (sql/association-join :inner {:roles {:opts {}
