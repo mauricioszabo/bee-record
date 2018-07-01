@@ -8,10 +8,16 @@
               :pk :id
               :fields [:id :login :pass]}))
 
+(def permissions {:table :perms
+                  :pk :id
+                  :fields [:access]})
+
 (def roles
   (sql/model {:table :roles
               :pk :id
-              :fields [:id :name]}))
+              :fields [:id :name]
+              :associations {:perms {:model permissions
+                                     :on {:id :role-id}}}}))
 
 (def users
   (sql/model {:table :users
@@ -67,4 +73,23 @@
         (sql/association-join :inner {:roles {:opts {:with-model
                                                      (sql/where roles {:name "admin"})}}})
         as-sql first)
-    => #"INNER JOIN \(SELECT `roles`.`id`.*WHERE.*\) `roles` ON"))
+    => #"INNER JOIN \(SELECT `roles`.`id`.*WHERE.*\) `roles` ON")
+
+  (fact "create joins for nested associations"
+    (-> users
+        (sql/association-join :inner {:roles :perms})
+        as-sql first)
+    => (re-pattern (str "INNER JOIN `roles` "
+                        "ON \\(`users`.`id` = `roles`.`user_id`\\).*"
+                        "INNER JOIN `perms` "
+                        "ON \\(`roles`.`id` = `perms`.`role_id`\\)")))
+
+  (fact "create different joins for nested associations"
+    (-> users
+        (sql/association-join :inner {:roles {:opts {}
+                                              :perms {:opts {:kind :left}}}})
+        as-sql first)
+    => (re-pattern (str "INNER JOIN `roles` "
+                        "ON \\(`users`.`id` = `roles`.`user_id`\\).*"
+                        "LEFT JOIN `perms` "
+                        "ON \\(`roles`.`id` = `perms`.`role_id`\\)"))))
