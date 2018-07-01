@@ -122,11 +122,15 @@
 (declare association-join)
 (defn- map-join [model kind [assoc val]]
   (let [nested-assoc (dissoc val :opts)
-        joined (assoc-join model kind assoc (:opts val))
-        nested-model (get-in model [:associations assoc :model])
-        nested-joins (map (fn [[k v]] (association-join nested-model kind {k v}))
+        opts (:opts val)
+        joined (assoc-join model kind assoc opts)
+        nested-model (select (get-in model [:associations assoc :model]) [])
+        to-merge [:join :left-join :right-join :select]
+        nested-joins (map (fn [[k v]] (select-keys
+                                       (association-join nested-model kind {k v})
+                                       to-merge))
                           nested-assoc)]
-    (reduce #(merge-joins %1 (select-keys %2 [:join :left-join :right-join])) joined nested-joins)))
+    (reduce merge-joins joined nested-joins)))
 
 (defn association-join [model kind associations]
   (let [norm-map #(->> %
@@ -140,8 +144,3 @@
       (keyword? associations) (assoc-join model kind associations {})
       (map? associations) (reduce #(map-join %1 kind %2) model (norm-map associations))
       (coll? associations) (reduce #(assoc-join %1 kind %2 {}) model associations))))
-
-
-(dissoc {:opts {}
-         :perms {:opts {:foo :bar}}}
-        :opts)

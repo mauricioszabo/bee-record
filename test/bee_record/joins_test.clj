@@ -8,9 +8,10 @@
               :pk :id
               :fields [:id :login :pass]}))
 
-(def permissions {:table :perms
-                  :pk :id
-                  :fields [:access]})
+(def permissions
+  (sql/model {:table :perms
+              :pk :id
+              :fields [:access]}))
 
 (def roles
   (sql/model {:table :roles
@@ -101,4 +102,11 @@
     => (re-pattern (str "INNER JOIN `roles` "
                         "ON \\(`users`.`id` = `roles`.`user_id`\\).*"
                         "LEFT JOIN `perms` "
-                        "ON \\(`roles`.`id` = `perms`.`role_id`\\)"))))
+                        "ON \\(`roles`.`id` = `perms`.`role_id`\\)")))
+
+  (fact "adds fields for nested associations"
+    (-> users
+        (sql/select [:name])
+        (sql/association-join :inner {:roles {:perms {:opts {:include-fields true}}}})
+        as-sql first)
+    => #"SELECT `users`.`name` AS `users/name`, `perms`.`access` AS `perms/access`"))
