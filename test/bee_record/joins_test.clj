@@ -3,10 +3,13 @@
             [bee-record.test-helper :refer :all]
             [midje.sweet :refer :all]))
 
+(declare users)
 (def accounts
   (sql/model {:table :accs
               :pk :id
-              :fields [:id :login :pass]}))
+              :fields [:id :login :pass]
+              :associations {:users {:model (delay users)
+                                     :on {:user-id :id}}}}))
 
 (def permissions
   (sql/model {:table :perms
@@ -56,6 +59,12 @@
         (sql/association-join :inner :roles)
         as-sql first)
     => (contains "INNER JOIN `roles` ON (`users`.`id` = `roles`.`user_id`)"))
+
+  (fact "supports forward declarations"
+    (-> accounts
+        (sql/association-join :inner :users)
+        as-sql first)
+    => (contains "INNER JOIN `users` ON (`accs`.`user_id` = `users`.`id`)"))
 
   (fact "will join multiple associations"
     (-> users

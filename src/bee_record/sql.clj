@@ -42,18 +42,18 @@
     (update model :select #(vec (concat % new-fields)))))
 
 (defn- normalize-field [model field]
-    (cond
-      (not (keyword? field)) field
+  (cond
+    (not (keyword? field)) field
 
-      (re-find #"\." (name field)) field
+    (re-find #"\." (name field)) field
 
-      (namespace field) (-> field
-                            (str/replace #"/" ".")
-                            (str/replace #"^:" "")
-                            (str/replace #"-" "_")
-                            keyword)
+    (namespace field) (-> field
+                          (str/replace #"/" ".")
+                          (str/replace #"^:" "")
+                          (str/replace #"-" "_")
+                          keyword)
 
-      :else (as-sql-field (as-table model) field)))
+    :else (as-sql-field (as-table model) field)))
 
 (defn- normalize-fields [model [op & rest]]
   (->> rest
@@ -99,14 +99,17 @@
 (defn- merge-joins [m1 m2]
   (merge-with #(vec (concat %1 %2)) m1 m2))
 
-(defn join [model kind foreign-table conditions]
-  (let [ft-name (cond-> foreign-table (coll? foreign-table) last)
-        join-model {(joins kind)
-                    [foreign-table
-                     (if (map? conditions)
-                       (normalize-join-map (:table model) ft-name conditions)
-                       (norm-conditions model conditions))]}]
-    (merge-joins model join-model)))
+(declare association-join)
+(defn join
+  ([model kind associations] (association-join model kind associations))
+  ([model kind foreign-table conditions]
+   (let [ft-name (cond-> foreign-table (coll? foreign-table) last)
+         join-model {(joins kind)
+                     [foreign-table
+                      (if (map? conditions)
+                        (normalize-join-map (:table model) ft-name conditions)
+                        (norm-conditions model conditions))]}]
+     (merge-joins model join-model))))
 
 (defn- table-to-assoc-join [model]
   (let [complex-sql (or (-> model :from count (> 1))
@@ -123,12 +126,16 @@
 (defn- assoc-join [model kind association opts]
   (let [specs (get-in model [:associations association])
         foreign-model (get opts :with-model (:model specs))
+        foreign-model (cond-> foreign-model (delay? foreign-model) deref)
         kind (or (:kind opts) kind)]
+    (when-not (map? foreign-model)
+      (throw (ex-info "Invalid association" {:model model
+                                             :association association
+                                             :resolved-association foreign-model})))
     (cond-> model
             (:include-fields opts) (select+ (:select foreign-model))
             :always (join kind (table-to-assoc-join foreign-model) (:on specs)))))
 
-(declare association-join)
 (defn- map-join [model kind [assoc val]]
   (let [nested-assoc (dissoc val :opts)
         opts (:opts val)
