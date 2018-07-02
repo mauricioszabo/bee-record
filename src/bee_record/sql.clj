@@ -123,10 +123,14 @@
       [model (:table model)]
       (:table model))))
 
+(defn- get-assoc-model [model association opts]
+  (let [primary-model (get-in model [:associations association :model])
+        foreign-model (get opts :with-model primary-model)]
+    (cond-> foreign-model (delay? foreign-model) deref)))
+
 (defn- assoc-join [model kind association opts]
   (let [specs (get-in model [:associations association])
-        foreign-model (get opts :with-model (:model specs))
-        foreign-model (cond-> foreign-model (delay? foreign-model) deref)
+        foreign-model (get-assoc-model model association opts)
         kind (or (:kind opts) kind)]
     (when-not (map? foreign-model)
       (throw (ex-info "Invalid association" {:model model
@@ -140,7 +144,7 @@
   (let [nested-assoc (dissoc val :opts)
         opts (:opts val)
         joined (assoc-join model kind assoc opts)
-        nested-model (select (get-in model [:associations assoc :model]) [])
+        nested-model (select (get-assoc-model model assoc opts) [])
         to-merge [:join :left-join :right-join :select]
         nested-joins (map (fn [[k v]] (select-keys
                                        (association-join nested-model kind {k v})
