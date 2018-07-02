@@ -1,7 +1,8 @@
 (ns bee-record.sql
-  (:refer-clojure :exclude [:select])
+  (:refer-clojure :exclude [select find])
   (:require [honeysql.core :as honey]
             [clojure.string :as str]
+            [clojure.java.jdbc :as jdbc]
             [clojure.walk :as walk]))
 
 (def quoting (atom :ansi))
@@ -144,3 +145,12 @@
       (keyword? associations) (assoc-join model kind associations {})
       (map? associations) (reduce #(map-join %1 kind %2) model (norm-map associations))
       (coll? associations) (reduce #(assoc-join %1 kind %2 {}) model associations))))
+
+(defn find [model value]
+  (-> model (where [:= (get model :pk :id) value])
+      (assoc :limit 1
+             :resolve :first-only)))
+
+(defn query [model db]
+  (cond-> (jdbc/query db (to-sql model))
+          (-> model :resolve (= :first-only)) first))
