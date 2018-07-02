@@ -4,7 +4,7 @@
             [midje.sweet :refer :all]))
 
 (fact "will generate a SQL given a honey struct"
-  (sql/to-sql {:select [:a]}) => ["SELECT `a`"])
+  (as-sql {:select [:a]}) => ["SELECT `a`"])
 
 (def users
   (sql/model {:table :users
