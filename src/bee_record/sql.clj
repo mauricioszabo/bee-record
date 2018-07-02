@@ -132,7 +132,7 @@
   (let [specs (get-in model [:associations association])
         foreign-model (get-assoc-model model association opts)
         kind (or (:kind opts) kind)]
-    (when-not (map? foreign-model)
+    (when-not (or specs (map? foreign-model))
       (throw (ex-info "Invalid association" {:model model
                                              :association association
                                              :resolved-association foreign-model})))
