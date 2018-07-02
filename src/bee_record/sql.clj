@@ -78,6 +78,14 @@
 (defn where [model comparision]
   (assoc model :where (norm-conditions model comparision)))
 
+(defn where+ [model comparision]
+  (let [old-where (:where model)
+        new-where (norm-conditions model comparision)]
+    (assoc model :where (cond
+                          (nil? old-where) new-where
+                          (-> old-where first (= :and)) (conj old-where new-where)
+                          :else [:and old-where new-where]))))
+
 (def ^:private joins {:inner :join
                       :left :left-join
                       :right :right-join})
@@ -147,7 +155,7 @@
       (coll? associations) (reduce #(assoc-join %1 kind %2 {}) model associations))))
 
 (defn find [model value]
-  (-> model (where [:= (get model :pk :id) value])
+  (-> model (where+ [:= (get model :pk :id) value])
       (assoc :limit 1
              :resolve :first-only)))
 

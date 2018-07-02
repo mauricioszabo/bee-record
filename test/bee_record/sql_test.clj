@@ -37,7 +37,23 @@
 
   (fact "will add WHERE clauses"
     (-> users (sql/where '(:= :id 1)) as-sql)
-    => (just [#"WHERE `users`\.`id` = ?" 1])))
+    => (just [#"WHERE `users`\.`id` = ?" 1]))
+
+  (fact "will concatenate WHERE clauses"
+    (-> users
+        (sql/where+ '(:= :id 1))
+        (sql/where+ '(:= :id 2))
+        as-sql)
+    => (just [#"WHERE \(`users`\.`id` = \? AND `users`\.`id` = \?\)" 1 2]))
+
+  (fact "will not pollute WHERE clauses"
+    (-> users
+        (sql/where+ '(:= :id 1))
+        (sql/where+ '(:= :id 2))
+        (sql/where+ '(:= :id 3))
+        as-sql)
+    => (just [#"WHERE \(`users`.`id`.*`users`.`id`.*`users`.`id` = \?\)" 1 2 3])))
+
 
 (facts "about WHERE clauses"
   (tabular
