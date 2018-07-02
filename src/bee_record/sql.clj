@@ -78,7 +78,7 @@
 (defn where [model comparision]
   (assoc model :where (norm-conditions model comparision)))
 
-(defn where+ [model comparision]
+(defn restrict [model comparision]
   (let [old-where (:where model)
         new-where (norm-conditions model comparision)]
     (assoc model :where (cond
@@ -155,7 +155,7 @@
       (coll? associations) (reduce #(assoc-join %1 kind %2 {}) model associations))))
 
 (defn find [model value]
-  (-> model (where+ [:= (get model :pk :id) value])
+  (-> model (restrict [:= (get model :pk :id) value])
       (assoc :limit 1
              :resolve :first-only)))
 
