@@ -15,10 +15,11 @@
                                   :aggregation {:people/id :people/id}}
                         :same-ids {:fn (fn [model]
                                          (sql/with-results model
-                                           #(sql/where people [:in :id (map :people/id %)])))
+                                           #(-> people
+                                                (sql/select [:id])
+                                                (sql/where [:in :id (map :people/id %)]))))
                                    :aggregation {:people/id :people/id}}}}))
 
-(reset! sql/logging #(do (print (first %) " ") (prn (vec (rest %)))))
 (fact "will preload (with another query) defined queries"
   (with-prepared-db
     (-> people
@@ -37,6 +38,6 @@
         (sql/with :same-ids)
         (sql/query db)))
   => [{:people/id 2 :people/name "Bar"
-       :same-ids [{:people/id 2 :people/name "Bar" :people/age 20}]}
+       :same-ids [{:people/id 2}]}
       {:people/id 3 :people/name "Baz"
-       :same-ids [{:people/id 3 :people/name "Baz" :people/age 15}]}])
+       :same-ids [{:people/id 3}]}])

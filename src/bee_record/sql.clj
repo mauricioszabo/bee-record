@@ -178,7 +178,6 @@
        (assoc :limit 1
               :resolve :first-only))))
 
-(defn p [a ] (println a) a)
 (defn query [model db]
   (let [map-res (:map-results model)
         with-res (:with-results model)]
