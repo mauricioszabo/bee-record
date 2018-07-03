@@ -171,5 +171,17 @@
              :resolve :first-only)))
 
 (defn query [model db]
-  (cond-> (jdbc/query db (to-sql model))
-          (-> model :resolve (= :first-only)) first))
+  (let [map-res (:map-results model)]
+    (cond-> (jdbc/query db (to-sql model))
+            map-res (->> (map map-res))
+            (-> model :resolve (= :first-only)) first)))
+
+(defn map-results [model fun]
+  (assoc model :map-results fun))
+
+(defn return [model query-name & args]
+  (let [scope-fn (-> model
+                     (get-in [:queries query-name :fn])
+                     (or (throw (ex-info "Invalid query for model"
+                                         {:model model :query-name query-name}))))]
+    (apply scope-fn model args)))

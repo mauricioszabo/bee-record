@@ -9,7 +9,11 @@
                         :pk :id
                         :fields [:id :name :age]
                         :associations {:accounts {:model (delay accounts)
-                                                  :on {:id :user-id}}}}))
+                                                  :on {:id :user-id}}}
+                        :queries {:adults {:fn (fn [people age]
+                                                 (sql/restrict people [:>= :age age]))}
+                                  :same-initial {:fn (fn [people])}}}))
+
 
 (def accounts (sql/model {:table :accounts
                           :pk :id
@@ -39,3 +43,29 @@
     => [{:people/id 1 :people/name "Foo" :people/age 10 :logins/login "foo.tw"}
         {:people/id 1 :people/name "Foo" :people/age 10 :logins/login nil}
         {:people/id 2 :people/name "Bar" :people/age 20 :logins/login nil}]))
+
+(fact "will apply function after query"
+  (with-prepared-db
+    (-> people
+        (sql/restrict [:>= :id 2])
+        (sql/map-results :people/name)
+        (sql/query db))
+    => ["Bar" "Baz"]))
+
+; (fact "will query first model, then use results in another query"
+;   (with-prepared-db
+;     (-> people
+;         (sql/restrict [:in :id [2 3]])
+;         (sql/with-results (fn [results]
+;                             (let)
+;                             (map #(sql/where people [:> :id (:id %)])))))))
+
+(fact "will return defined queries"
+  (with-prepared-db
+    (-> people
+        (sql/restrict [:like :name "B%"])
+        (sql/return :adults 17)
+        (sql/query db))
+    => [{:people/id 2 :people/name "Bar" :people/age 20}]))
+
+(fact "will preload (with another query) defined queries")

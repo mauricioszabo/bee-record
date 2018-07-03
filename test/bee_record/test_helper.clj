@@ -35,7 +35,7 @@
     (jdbc/db-set-rollback-only! db)
     (jdbc/execute! db (honey/format {:values [{:id 1 :name "Foo", :age 10}
                                               {:id 2 :name "Bar", :age 20}
-                                              {:id 3 :name "Baz", :age 30}]
+                                              {:id 3 :name "Baz", :age 15}]
                                      :insert-into :people}
                                     :quoting :ansi))
     (jdbc/execute! db (honey/format {:values [{:id 1 :account "twitter", :user_id 1}
