@@ -171,10 +171,12 @@
       (map? associations) (reduce #(map-join %1 kind %2) model (norm-map associations))
       (coll? associations) (reduce #(assoc-join %1 kind %2 {}) model associations))))
 
-(defn find [model value]
-  (-> model (restrict [:= (get model :pk :id) value])
-      (assoc :limit 1
-             :resolve :first-only)))
+(defn find
+  ([model] (assoc model :limit 1 :resolve :first-only))
+  ([model value]
+   (-> model (restrict [:= (get model :pk :id) value])
+       (assoc :limit 1
+              :resolve :first-only))))
 
 (defn p [a ] (println a) a)
 (defn query [model db]
@@ -200,17 +202,31 @@
                                          {:model model :query-name query-name}))))]
     (apply scope-fn model args)))
 
-(map (juxt :foo :bar) [{:foo 10 :bar 20}])
+(defn gen-aggregation [results query-name get-parent get-child]
+  (fn [depent-results]
+    (let [grouped (group-by get-child depent-results)
+          associate #(let [key-to-search (get-parent %)
+                           children (get grouped key-to-search ())]
+                       (assoc % query-name children))]
+      (map associate results))))
+
 (defn- aggregate-fn [results dependent-model fields1 fields2 query-name]
   (let [get-parent (apply juxt fields1)
-        get-child (apply juxt fields2)]
+        get-child (apply juxt fields2)
+        aggregate (gen-aggregation results query-name get-parent get-child)
+        with-res (:with-results dependent-model)
+        dependent-model (dissoc dependent-model :with-results)]
 
-    (map-results dependent-model
-      (fn [depent-results]
-        (let [grouped (group-by get-child depent-results)]
-          (map #(assoc % query-name []) results))))))
-    ; (println "RES" fields1 fields2 results)
-    ; dependent-model))
+    (if with-res
+      (map-results (with-res results) aggregate)
+      (map-results dependent-model aggregate))))
+    ; (map-results dependent-model
+    ;   (fn [depent-results]
+    ;     (let [grouped (group-by get-child depent-results)
+    ;           associate #(let [key-to-search (get-parent %)
+    ;                            children (get grouped key-to-search ())]
+    ;                        (assoc % query-name children))]
+    ;       (map associate results))))))
 
 (defn with [model queries]
   (let [queried (return model queries)
@@ -220,13 +236,3 @@
       #(aggregate-fn % queried
                      (keys aggregate-fields) (vals aggregate-fields)
                      queries))))
-  ;       aggregate-fn (fn [parents]
-  ;                      (map-results (apply return (dissoc model :with-results) query params)
-  ;                                   (fn [children]
-  ;                                     (let [cs (group-by #(get % child-field) children)]
-  ;                                       (map
-  ;                                        #(assoc % query (get cs (get % parent-field) ()))
-  ;                                        parents)))))]
-  ;   (return model aggregate-fn)))
-
-        ; scoped-result (apply return model query-scope)]))
