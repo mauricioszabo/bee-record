@@ -220,13 +220,6 @@
     (if with-res
       (map-results (with-res results) aggregate)
       (map-results dependent-model aggregate))))
-    ; (map-results dependent-model
-    ;   (fn [depent-results]
-    ;     (let [grouped (group-by get-child depent-results)
-    ;           associate #(let [key-to-search (get-parent %)
-    ;                            children (get grouped key-to-search ())]
-    ;                        (assoc % query-name children))]
-    ;       (map associate results))))))
 
 (defn with [model queries]
   (let [queried (return model queries)
