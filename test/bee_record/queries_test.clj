@@ -11,8 +11,7 @@
                         :associations {:accounts {:model (delay accounts)
                                                   :on {:id :user-id}}}
                         :queries {:adults {:fn (fn [people age]
-                                                 (sql/restrict people [:>= :age age]))}
-                                  :same-initial {:fn (fn [people])}}}))
+                                                 (sql/restrict people [:>= :age age]))}}}))
 
 
 (def accounts (sql/model {:table :accounts
@@ -44,21 +43,35 @@
         {:people/id 1 :people/name "Foo" :people/age 10 :logins/login nil}
         {:people/id 2 :people/name "Bar" :people/age 20 :logins/login nil}]))
 
-(fact "will apply function after query"
+(fact "will apply function right after query"
   (with-prepared-db
     (-> people
         (sql/restrict [:>= :id 2])
-        (sql/map-results :people/name)
+        (sql/map-results #(map :people/name %))
         (sql/query db))
     => ["Bar" "Baz"]))
 
-; (fact "will query first model, then use results in another query"
-;   (with-prepared-db
-;     (-> people
-;         (sql/restrict [:in :id [2 3]])
-;         (sql/with-results (fn [results]
-;                             (let)
-;                             (map #(sql/where people [:> :id (:id %)])))))))
+(defn aggregate-greater [people-results]
+  (let [ages (map :people/age people-results)
+        min-age (apply min ages)]
+    (-> people
+        (sql/select [:age])
+        (sql/map-results
+         (fn [child-results]
+           (map (fn [age]
+                  {:people/age age
+                   :greater (filter #(> (:people/age %) age) child-results)})
+                ages))))))
+
+(fact "will query first model, then use results in another query"
+  (with-prepared-db
+    (-> people
+        (sql/select [:age])
+        (sql/restrict [:in :id [2 3]])
+        (sql/with-results aggregate-greater)
+        (sql/query db))
+    => [{:people/age 20 :greater []}
+        {:people/age 15 :greater [{:people/age 20}]}]))
 
 (fact "will return defined queries"
   (with-prepared-db

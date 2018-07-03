@@ -171,13 +171,18 @@
              :resolve :first-only)))
 
 (defn query [model db]
-  (let [map-res (:map-results model)]
+  (let [map-res (:map-results model)
+        with-res (:with-results model)]
     (cond-> (jdbc/query db (to-sql model))
-            map-res (->> (map map-res))
+            map-res map-res
+            with-res (#(query (with-res %) db))
             (-> model :resolve (= :first-only)) first)))
 
 (defn map-results [model fun]
   (assoc model :map-results fun))
+
+(defn with-results [model fun]
+  (assoc model :with-results fun))
 
 (defn return [model query-name & args]
   (let [scope-fn (-> model
