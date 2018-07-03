@@ -13,10 +13,7 @@
               :associations {:accounts {:model (delay accounts)
                                         :on {:id :user-id}}}
               :queries {:adults {:fn (fn [people age]
-                                       (sql/restrict people [:>= :age age]))}
-                        :same-id {:fn (fn [model]
-                                        (sql/with-results model
-                                          #(sql/where people [:in :id (map :people/id %)])))}}}))
+                                       (sql/restrict people [:>= :age age]))}}}))
 
 (def accounts (sql/model {:table :accounts
                           :pk :id
@@ -73,17 +70,6 @@
         (sql/return :adults 17)
         (sql/query db))
     => [{:people/id 2 :people/name "Bar" :people/age 20}]))
-
-(fact "will preload (with another query) defined queries"
-  (with-prepared-db
-    (-> people
-        (sql/restrict [:like :name "B%"])
-        (sql/aggregate :same-id [:people/id :people/id])
-        (sql/query db))
-    => [{:people/id 2 :people/name "Bar" :people/age 20
-         :same-id [{:people/id 2 :people/name "Bar" :people/age 20}]}
-        {:people/id 3 :people/name "Baz" :people/age 15
-         :same-id [{:people/id 3 :people/name "Baz" :people/age 15}]}]))
 
 (defn aggregate-greater [people-results]
   (let [ages (map :people/age people-results)
