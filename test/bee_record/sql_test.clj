@@ -64,4 +64,7 @@
    [:and [:= :name "boo"] [:= :id 10]]  "`users`.`name` = ? AND `users`.`id` = ?"
    '(:= :name :foo)                     "`users`.`name` = `users`.`foo`"
    {:name 10}                           "`users`.`name` = ?"
-   {:foo/name 10}                       "(`foo`.`name` = ?)"))
+   {:foo/name 10}                       "(`foo`.`name` = ?)"
+   {:foo.name 10}                       "(`foo`.`name` = ?)"
+   [:in :id {:from [:b]
+             :select [:id]}]            "(`users`.`id` in (SELECT `id` FROM `b`))"))

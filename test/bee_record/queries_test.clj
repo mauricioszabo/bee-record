@@ -4,15 +4,19 @@
             [bee-record.test-helper :refer :all]
             [midje.sweet :refer :all]))
 
-(declare accounts logins)
-(def people (sql/model {:table :people
-                        :pk :id
-                        :fields [:id :name :age]
-                        :associations {:accounts {:model (delay accounts)
-                                                  :on {:id :user-id}}}
-                        :queries {:adults {:fn (fn [people age]
-                                                 (sql/restrict people [:>= :age age]))}}}))
+(declare people accounts logins)
 
+(def people
+  (sql/model {:table :people
+              :pk :id
+              :fields [:id :name :age]
+              :associations {:accounts {:model (delay accounts)
+                                        :on {:id :user-id}}}
+              :queries {:adults {:fn (fn [people age]
+                                       (sql/restrict people [:>= :age age]))}
+                        :same-id {:fn (fn [model]
+                                        (sql/with-results model
+                                          #(sql/where people [:in :id (map :people/id %)])))}}}))
 
 (def accounts (sql/model {:table :accounts
                           :pk :id
@@ -51,18 +55,7 @@
         (sql/query db))
     => ["Bar" "Baz"]))
 
-(defn aggregate-greater [people-results]
-  (let [ages (map :people/age people-results)
-        min-age (apply min ages)]
-    (-> people
-        (sql/select [:age])
-        (sql/map-results
-         (fn [child-results]
-           (map (fn [age]
-                  {:people/age age
-                   :greater (filter #(> (:people/age %) age) child-results)})
-                ages))))))
-
+(declare aggregate-greater)
 (fact "will query first model, then use results in another query"
   (with-prepared-db
     (-> people
@@ -81,4 +74,25 @@
         (sql/query db))
     => [{:people/id 2 :people/name "Bar" :people/age 20}]))
 
-(fact "will preload (with another query) defined queries")
+(fact "will preload (with another query) defined queries"
+  (with-prepared-db
+    (-> people
+        (sql/restrict [:like :name "B%"])
+        (sql/aggregate :same-id [:people/id :people/id])
+        (sql/query db))
+    => [{:people/id 2 :people/name "Bar" :people/age 20
+         :same-id [{:people/id 2 :people/name "Bar" :people/age 20}]}
+        {:people/id 3 :people/name "Baz" :people/age 15
+         :same-id [{:people/id 3 :people/name "Baz" :people/age 15}]}]))
+
+(defn aggregate-greater [people-results]
+  (let [ages (map :people/age people-results)
+        min-age (apply min ages)]
+    (-> people
+        (sql/select [:age])
+        (sql/map-results
+         (fn [child-results]
+           (map (fn [age]
+                  {:people/age age
+                   :greater (filter #(> (:people/age %) age) child-results)})
+                ages))))))

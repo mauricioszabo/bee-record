@@ -6,6 +6,7 @@
             [clojure.walk :as walk]))
 
 (def quoting (atom :ansi))
+(def logging (atom nil))
 
 (defn- as-sql-field [table field]
   (keyword (str table "." (str/replace (name field) #"-" "_"))))
@@ -56,18 +57,23 @@
     :else (as-sql-field (as-table model) field)))
 
 (defn- normalize-fields [model [op & rest]]
-  (->> rest
-       (map #(normalize-field model %))
-       (cons op)
-       vec))
+  (let [norm (->> rest
+                  (map #(normalize-field model %))
+                  (cons op)
+                  vec)]
+    (if (and (= op :in) (map? (last rest)))
+      (update norm 2 with-meta {:normalized true})
+      norm)))
 
 (defn- normalize-map [model comp-map]
-  (let [norm-kv #(normalize-field model %)
-        normalize #(vec (cons := (map norm-kv %)))]
-    (->> comp-map
-         (map normalize)
-         (cons :and)
-         vec)))
+  (if (-> comp-map meta :normalized)
+    comp-map
+    (let [norm-kv #(normalize-field model %)
+          normalize #(vec (cons := (map norm-kv %)))]
+      (->> comp-map
+           (map normalize)
+           (cons :and)
+           vec))))
 
 (defn- norm-conditions [model comparision]
   (walk/prewalk #(cond->> %
@@ -170,13 +176,16 @@
       (assoc :limit 1
              :resolve :first-only)))
 
+(defn p [a ] (println a) a)
 (defn query [model db]
   (let [map-res (:map-results model)
         with-res (:with-results model)]
+    (when @logging (@logging (to-sql model)))
     (cond-> (jdbc/query db (to-sql model))
             map-res map-res
             with-res (#(query (with-res %) db))
             (-> model :resolve (= :first-only)) first)))
+            ; :foo p)))
 
 (defn map-results [model fun]
   (assoc model :map-results fun))
@@ -190,3 +199,34 @@
                      (or (throw (ex-info "Invalid query for model"
                                          {:model model :query-name query-name}))))]
     (apply scope-fn model args)))
+
+(map (juxt :foo :bar) [{:foo 10 :bar 20}])
+(defn- aggregate-fn [results dependent-model fields1 fields2 query-name]
+  (let [get-parent (apply juxt fields1)
+        get-child (apply juxt fields2)]
+
+    (map-results dependent-model
+      (fn [depent-results]
+        (let [grouped (group-by get-child depent-results)]
+          (map #(assoc % query-name []) results))))))
+    ; (println "RES" fields1 fields2 results)
+    ; dependent-model))
+
+(defn with [model queries]
+  (let [queried (return model queries)
+        aggregate-fields (or (get-in model [:queries queries :aggregation])
+                             (throw (ex-info "This query can't be aggregated")))]
+    (with-results model
+      #(aggregate-fn % queried
+                     (keys aggregate-fields) (vals aggregate-fields)
+                     queries))))
+  ;       aggregate-fn (fn [parents]
+  ;                      (map-results (apply return (dissoc model :with-results) query params)
+  ;                                   (fn [children]
+  ;                                     (let [cs (group-by #(get % child-field) children)]
+  ;                                       (map
+  ;                                        #(assoc % query (get cs (get % parent-field) ()))
+  ;                                        parents)))))]
+  ;   (return model aggregate-fn)))
+
+        ; scoped-result (apply return model query-scope)]))
