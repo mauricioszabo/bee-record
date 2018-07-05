@@ -54,7 +54,6 @@
         as-sql)
     => (just [#"WHERE \(`users`.`id`.*`users`.`id`.*`users`.`id` = \?\)" 1 2 3])))
 
-
 (facts "about WHERE clauses"
   (tabular
    (fact "normalizes WHERE clauses"

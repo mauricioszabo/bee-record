@@ -180,13 +180,14 @@
 
 (defn query [model db]
   (let [map-res (:map-results model)
-        with-res (:with-results model)]
+        with-res (:with-results model)
+        after-query (:after-query model)]
     (when @logging (@logging (to-sql model)))
     (cond-> (jdbc/query db (to-sql model))
             map-res map-res
-            with-res (#(query (with-res %) db))
+            (and with-res (not after-query)) (#(query (with-res %) db))
+            after-query (after-query db)
             (-> model :resolve (= :first-only)) first)))
-            ; :foo p)))
 
 (defn map-results [model fun]
   (assoc model :map-results fun))
@@ -201,30 +202,32 @@
                                          {:model model :query-name query-name}))))]
     (apply scope-fn model args)))
 
-(defn gen-aggregation [results query-name get-parent get-child]
-  (fn [depent-results]
-    (let [grouped (group-by get-child depent-results)
-          associate #(let [key-to-search (get-parent %)
-                           children (get grouped key-to-search ())]
-                       (assoc % query-name children))]
-      (map associate results))))
+(defn- aggregate [parents children query-name get-parent get-child]
+  (let [grouped (group-by get-child children)
+        associate #(let [key-to-search (get-parent %)
+                         children (get grouped key-to-search ())]
+                     (assoc % query-name children))]
+    (map associate parents)))
 
-(defn- aggregate-fn [results dependent-model fields1 fields2 query-name]
-  (let [get-parent (apply juxt fields1)
-        get-child (apply juxt fields2)
-        aggregate (gen-aggregation results query-name get-parent get-child)
-        with-res (:with-results dependent-model)
-        dependent-model (dissoc dependent-model :with-results)]
+(defn with [model query-names]
+  (let [query-names (cond-> query-names (not (coll? query-names)) vector)
+        get-fields (fn [query-name]
+                     [query-name
+                      (return model query-name)
+                      (or (get-in model [:queries query-name :aggregation])
+                          (throw (ex-info "This query can't be aggregated"
+                                          {:query-name query-name})))])
+        fields (mapv get-fields query-names)]
 
-    (if with-res
-      (map-results (with-res results) aggregate)
-      (map-results dependent-model aggregate))))
-
-(defn with [model queries]
-  (let [queried (return model queries)
-        aggregate-fields (or (get-in model [:queries queries :aggregation])
-                             (throw (ex-info "This query can't be aggregated")))]
-    (with-results model
-      #(aggregate-fn % queried
-                     (keys aggregate-fields) (vals aggregate-fields)
-                     queries))))
+    (assoc model :after-query
+           (fn [parents db]
+             (reduce (fn [results [query-name queried agg-fields]]
+                       (let [get-parent (apply juxt (keys agg-fields))
+                             get-child (apply juxt (vals agg-fields))
+                             with-res (:with-results queried)
+                             children (if with-res
+                                        (query (with-res parents) db)
+                                        (query queried db))]
+                         (aggregate results children query-name get-parent get-child)))
+                     parents
+                     fields)))))

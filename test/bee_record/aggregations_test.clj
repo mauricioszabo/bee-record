@@ -30,6 +30,7 @@
   => [{:people/id 1 :people/name "Foo"
        :by-ids [{:people/id 1 :people/name "Foo" :people/age 10}]}])
 
+(def no-queries (atom 0))
 (fact "will preload (with another query) defined queries that uses with-results"
   (with-prepared-db
     (-> people
@@ -40,4 +41,25 @@
   => [{:people/id 2 :people/name "Bar"
        :same-ids [{:people/id 2}]}
       {:people/id 3 :people/name "Baz"
-       :same-ids [{:people/id 3}]}])
+       :same-ids [{:people/id 3}]}]
+  @no-queries => 2
+  (background
+   (before :facts (do
+                    (reset! no-queries 0)
+                    (reset! sql/logging (fn [query] (swap! no-queries inc)))))
+   (after :facts (reset! sql/logging #(do (print "QUERY" (str/trim (first %)) " ") (prn (vec (rest %))))))))
+
+(def people-more-scopes
+  (assoc-in people [:queries :ids2] (-> people :queries :by-ids)))
+(facts "when preloading with nesting"
+  (fact "will preload arrays"
+    (with-prepared-db
+      (-> people-more-scopes
+          (sql/select [:id :name])
+          (sql/restrict [:like :name "F%"])
+          (sql/with [:by-ids :same-ids :ids2])
+          (sql/query db)))
+    => [{:people/id 1 :people/name "Foo"
+         :by-ids [{:people/id 1 :people/name "Foo" :people/age 10}]
+         :same-ids [{:people/id 1}]
+         :ids2 [{:people/id 1 :people/name "Foo" :people/age 10}]}]))
