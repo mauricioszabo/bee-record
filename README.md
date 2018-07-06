@@ -1,6 +1,8 @@
 # Bee Record
 _Where "ActiveRecord" encounters "HoneySQL"..._
 
+[![Clojars Project](https://img.shields.io/clojars/v/bee-record.svg)](https://clojars.org/bee-record)
+
 Bee Record is an wrapper to HoneySQL. It maps Clojure maps to something resembling "records" from the ActiveRecord patterns, and creates some functions to allow us to manipulate these records in a simple way.
 
 Heavily inspired by Ruby's ActiveRecord (and Sequel), it allows us to generate queries, to query things, and to update records. Different from ActiveRecord and Sequel, it has a separate API to query things and to update things.
