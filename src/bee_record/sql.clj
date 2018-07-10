@@ -209,9 +209,8 @@
                      (assoc % query-name children))]
     (map associate parents)))
 
-(defn with [model query-names]
-  (let [query-names (cond-> query-names (not (coll? query-names)) vector)
-        get-fields (fn [query-name]
+(defn- with- [model query-names]
+  (let [get-fields (fn [query-name]
                      [query-name
                       (return model query-name)
                       (or (get-in model [:queries query-name :aggregation])
@@ -231,3 +230,15 @@
                          (aggregate results children query-name get-parent get-child)))
                      parents
                      fields)))))
+
+(declare with)
+(defn- with-map [model query-map]
+  (let [ks (keys query-map)
+        vs (vals query-map)]))
+
+
+(defn with [model query-names]
+  (cond
+    (map? query-names) (with-map model query-names)
+    (coll? query-names) (with- model query-names)
+    :else (with- model [query-names])))
