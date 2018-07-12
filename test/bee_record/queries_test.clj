@@ -52,7 +52,18 @@
         (sql/query db))
     => ["Bar" "Baz"]))
 
-(declare aggregate-greater)
+(defn aggregate-greater [people-results]
+  (let [ages (map :people/age people-results)
+        min-age (apply min ages)]
+    (-> people
+        (sql/select [:age])
+        (sql/map-results
+         (fn [child-results]
+           (map (fn [age]
+                  {:people/age age
+                   :greater (filter #(> (:people/age %) age) child-results)})
+                ages))))))
+
 (fact "will query first model, then use results in another query"
   (with-prepared-db
     (-> people
@@ -70,15 +81,3 @@
         (sql/return :adults 17)
         (sql/query db))
     => [{:people/id 2 :people/name "Bar" :people/age 20}]))
-
-(defn aggregate-greater [people-results]
-  (let [ages (map :people/age people-results)
-        min-age (apply min ages)]
-    (-> people
-        (sql/select [:age])
-        (sql/map-results
-         (fn [child-results]
-           (map (fn [age]
-                  {:people/age age
-                   :greater (filter #(> (:people/age %) age) child-results)})
-                ages))))))
