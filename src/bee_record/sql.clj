@@ -209,14 +209,23 @@
                      (assoc % query-name children))]
     (map associate parents)))
 
-(defn- with- [model query-names]
-  (let [get-fields (fn [query-name]
-                     [query-name
-                      (return model query-name)
-                      (or (get-in model [:queries query-name :aggregation])
-                          (throw (ex-info "This query can't be aggregated"
-                                          {:query-name query-name})))])
-        fields (mapv get-fields query-names)]
+(declare with)
+(defn- get-fields-for-with [model [query-name vals]]
+  [query-name
+   (with (return model query-name) vals)
+   (or (get-in model [:queries query-name :aggregation])
+       (throw (ex-info "This query can't be aggregated"
+                       {:query-name query-name})))])
+
+(defn- norm-with [obj]
+  (cond
+    (map? obj) (->> obj (map (fn [[k v]] [k (norm-with v)])) (into {}))
+    (keyword? obj) {obj {}}
+    (coll? obj) (->> obj (map #(vector % {})) (into {}))))
+
+(defn with [model query-names]
+  (let [get-fields (partial get-fields-for-with model)
+        fields (mapv get-fields (norm-with query-names))]
 
     (assoc model :after-query
            (fn [parents db]
@@ -230,15 +239,3 @@
                          (aggregate results children query-name get-parent get-child)))
                      parents
                      fields)))))
-
-(declare with)
-(defn- with-map [model query-map]
-  (let [ks (keys query-map)
-        vs (vals query-map)]))
-
-
-(defn with [model query-names]
-  (cond
-    (map? query-names) (with-map model query-names)
-    (coll? query-names) (with- model query-names)
-    :else (with- model [query-names])))

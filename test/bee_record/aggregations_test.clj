@@ -69,10 +69,11 @@
       (-> people-more-scopes
           (sql/select [:id :age])
           (sql/where [:in :id [1 2]])
-          (sql/with {:by-ids :same-ids})))
+          (sql/with {:by-ids {:same-ids {}}})
+          (sql/query db)))
     => [{:people/id 1 :people/age 10
          :by-ids [{:people/id 1 :people/name "Foo" :people/age 10
-                   :saem-ids [{:people/id 1}]}]}
+                   :same-ids [{:people/id 1}]}]}
         {:people/id 2 :people/age 20
          :by-ids [{:people/id 2 :people/name "Bar" :people/age 20
-                   :saem-ids [{:people/id 2}]}]}]))
+                   :same-ids [{:people/id 2}]}]}]))
