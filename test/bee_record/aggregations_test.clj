@@ -47,7 +47,7 @@
    (before :facts (do
                     (reset! no-queries 0)
                     (reset! sql/logging (fn [query] (swap! no-queries inc)))))
-   (after :facts (reset! sql/logging #(do (print "QUERY" (str/trim (first %)) " ") (prn (vec (rest %))))))))
+   (after :facts (reset! sql/logging nil))))
 
 (def people-more-scopes
   (assoc-in people [:queries :ids2] (-> people :queries :by-ids)))
