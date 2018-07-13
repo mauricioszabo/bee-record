@@ -79,7 +79,7 @@
 (def accounts (sql/model {:table :accounts
                           :pk :id
                           :fields [:id :account :user-id]
-                          :associations {:person {:model people
+                          :associations {:person {:model (delay people)
                                                   :on {:accounts/user-id :people/id}}}}))
 
 (facts "will generate a scope for associations"

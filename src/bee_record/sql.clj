@@ -251,14 +251,14 @@
   (let [join-name (->> k name (str "join-") keyword)
         agg (-> specs :aggregation (or (:on specs)))]
     {join-name {:aggregation agg
-                :fn (fn [model]
-                      (-> model
+                :fn (fn [queried]
+                      (-> queried
                           (join :inner k)
-                          (select (-> specs :model :select))
+                          (select (:select (get-assoc-model model k {})))
                           distinct))}
 
      k {:aggregation agg
-        :fn (assoc->query-with-results agg (:model specs))}}))
+        :fn (assoc->query-with-results agg (get-assoc-model model k {}))}}))
 
 (defn model [{:keys [table pk fields associations queries] :as definition}]
   (let [assoc-queries (->> associations
