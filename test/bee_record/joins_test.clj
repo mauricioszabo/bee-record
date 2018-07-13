@@ -9,7 +9,7 @@
               :pk :id
               :fields [:id :login :pass]
               :associations {:users {:model (delay users)
-                                     :on {:user-id :id}}}}))
+                                     :on {:accs/user-id :users/id}}}}))
 
 (def permissions
   (sql/model {:table :perms
@@ -21,33 +21,33 @@
               :pk :id
               :fields [:id :name]
               :associations {:perms {:model permissions
-                                     :on {:id :role-id}}}}))
+                                     :on {:roles/id :perms/role-id}}}}))
 
 (def users
   (sql/model {:table :users
               :pk :id
               :fields [:id :name]
               :associations {:roles {:model roles
-                                     :on {:id :user-id}}
+                                     :on {:users/id :roles/user-id}}
                              :accs {:model accounts
-                                    :on {:id :user-id}}}}))
+                                    :on {:users/id :accounts/user-id}}}}))
 
 (facts "creating joins without associations"
   (fact "will left join"
-    (-> users (sql/join :left :roles {:id :user-id}) as-sql first)
+    (-> users (sql/join :left :roles {:users/id :roles/user-id}) as-sql first)
     => #"LEFT JOIN `roles` ON \(`users`.`id` = `roles`.`user_id`\)")
 
   (fact "will right join"
-    (-> users (sql/join :right :roles {:id :user-id}) as-sql first)
+    (-> users (sql/join :right :roles {:users/id :roles/user-id}) as-sql first)
     => #"RIGHT JOIN `roles` ON \(`users`.`id` = `roles`.`user_id`\)")
 
   (fact "will join"
-    (-> users (sql/join :inner :roles {:id :user-id}) as-sql first)
+    (-> users (sql/join :inner :roles {:users/id :roles/user-id}) as-sql first)
     => #"INNER JOIN `roles` ON \(`users`.`id` = `roles`.`user_id`\)")
 
   (fact "will join multiple tables"
     (-> users
-        (sql/join :inner :roles {:id :user-id})
+        (sql/join :inner :roles {:users/id :roles/user-id})
         (sql/join :inner :perms {:perms/role-id :roles/id})
         as-sql first)
     => (contains (str "INNER JOIN `roles` ON (`users`.`id` = `roles`.`user_id`) "

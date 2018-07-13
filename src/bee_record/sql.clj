@@ -93,12 +93,6 @@
 (def ^:private joins {:inner :join
                       :left :left-join
                       :right :right-join})
-(defn- normalize-join-map [table other conds]
-  (->> conds
-       (map (fn [[k v]] [(normalize-field {:table table} k)
-                         (normalize-field {:table other} v)]))
-       (into {})
-       (norm-conditions {})))
 
 (defn- merge-joins [m1 m2]
   (merge-with #(vec (concat %1 %2)) m1 m2))
@@ -109,10 +103,7 @@
   ([model kind foreign-table conditions]
    (let [ft-name (cond-> foreign-table (coll? foreign-table) last)
          join-model {(joins kind)
-                     [foreign-table
-                      (if (map? conditions)
-                        (normalize-join-map (:table model) ft-name conditions)
-                        (norm-conditions model conditions))]}]
+                     [foreign-table (norm-conditions model conditions)]}]
      (merge-joins model join-model))))
 
 (defn- table-to-assoc-join [model]
@@ -241,32 +232,32 @@
                      parents
                      fields)))))
 
-(defn- assoc->query [model [k v]]
-  (let [join-name (->> k name (str "join-") keyword)
-        p-name (as-table model)
-        a-name (as-table (-> model :associations k :model))
-        agg (-> v :aggregation (or (->> v
-                                        :on
-                                        (map (fn [[k v]] [(as-namespaced-field p-name k)
-                                                          (as-namespaced-field a-name v)]))
-                                        (into {}))))]
-    {join-name {:aggregation agg
-                :fn (fn [model]
-                      (-> model
-                          (join :inner k)
-                          (select (-> v :model :select))
-                          distinct))}
+(defn- assoc->query [model [k v]])
+  ; (let [join-name (->> k name (str "join-") keyword)
+  ;       p-name (as-table model)
+  ;       a-name (as-table (-> model :associations k :model))
+  ;       agg (-> v :aggregation (or (->> v
+  ;                                       :on
+  ;                                       (map (fn [[k v]] [(as-namespaced-field p-name k)
+  ;                                                         (as-namespaced-field a-name v)]))
+  ;                                       (into {}))))]
+  ;   {join-name {:aggregation agg
+  ;               :fn (fn [model]
+  ;                     (-> model
+  ;                         (join :inner k)
+  ;                         (select (-> v :model :select))
+  ;                         distinct))}}))
 
-     k {:aggregation agg
-        :fn (fn [model]
-              (with-results model
-                (fn [results]
-                  (let [assoc-model (get-in model [:associations k :model])
-                        conds (map (fn [[current agg]]
-                                     [:in agg (map current results)])
-                                   agg)]
-
-                    (where assoc-model (cons :and conds))))))}}))
+     ; k {:aggregation agg
+     ;    :fn (fn [model]
+     ;          (with-results model
+     ;            (fn [results]
+     ;              (let [assoc-model (get-in model [:associations k :model])
+     ;                    conds (map (fn [[current agg]]
+     ;                                 [:in agg (map current results)])
+     ;                               agg)]
+     ;
+     ;                (where assoc-model (cons :and conds))))))}}))
 
 (defn model [{:keys [table pk fields associations queries] :as definition}]
   (let [assoc-queries (->> associations
