@@ -18,7 +18,6 @@
                                                 (sql/where [:in :id (map :people/id %)]))))
                                    :aggregation {:people/id :people/id}}}}))
 
-(reset! sql/logging #(println (first %) "\n" (vec (rest %))))
 (fact "will preload (with another query) defined queries"
   (with-prepared-db
     (-> people
@@ -81,7 +80,7 @@
                           :pk :id
                           :fields [:id :account :user-id]
                           :associations {:person {:model people
-                                                  :on {:user-id :id}}}}))
+                                                  :on {:accounts/user-id :people/id}}}}))
 
 (facts "will generate a scope for associations"
   (fact "will allow us to query by model"

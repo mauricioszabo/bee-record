@@ -232,32 +232,33 @@
                      parents
                      fields)))))
 
-(defn- assoc->query [model [k v]])
-  ; (let [join-name (->> k name (str "join-") keyword)
-  ;       p-name (as-table model)
-  ;       a-name (as-table (-> model :associations k :model))
-  ;       agg (-> v :aggregation (or (->> v
-  ;                                       :on
-  ;                                       (map (fn [[k v]] [(as-namespaced-field p-name k)
-  ;                                                         (as-namespaced-field a-name v)]))
-  ;                                       (into {}))))]
-  ;   {join-name {:aggregation agg
-  ;               :fn (fn [model]
-  ;                     (-> model
-  ;                         (join :inner k)
-  ;                         (select (-> v :model :select))
-  ;                         distinct))}}))
+(defn assoc->query-with-results [agg agg-model]
+  (fn [parent-model]
+    (with-results parent-model
+      (fn [results]
+        (let [aggregate-things (fn [result a [parent child]] (update a child conj (parent result)))
+              mapped-results (loop [[result & rest] results
+                                    acc {}]
+                               (if result
+                                 (recur rest (reduce (partial aggregate-things result) acc agg))
+                                 acc))
+              conds (->> mapped-results
+                         (map #(vec (cons :in %)))
+                         (cons :and))]
+          (restrict agg-model conds))))))
 
-     ; k {:aggregation agg
-     ;    :fn (fn [model]
-     ;          (with-results model
-     ;            (fn [results]
-     ;              (let [assoc-model (get-in model [:associations k :model])
-     ;                    conds (map (fn [[current agg]]
-     ;                                 [:in agg (map current results)])
-     ;                               agg)]
-     ;
-     ;                (where assoc-model (cons :and conds))))))}}))
+(defn- assoc->query [model [k specs]]
+  (let [join-name (->> k name (str "join-") keyword)
+        agg (-> specs :aggregation (or (:on specs)))]
+    {join-name {:aggregation agg
+                :fn (fn [model]
+                      (-> model
+                          (join :inner k)
+                          (select (-> specs :model :select))
+                          distinct))}
+
+     k {:aggregation agg
+        :fn (assoc->query-with-results agg (:model specs))}}))
 
 (defn model [{:keys [table pk fields associations queries] :as definition}]
   (let [assoc-queries (->> associations
