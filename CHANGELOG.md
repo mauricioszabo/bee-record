@@ -1,6 +1,8 @@
 # Change Log
 
 ## 0.1.0
+- Associations now generate scopes
+- Scopes can be used with `with` aggregation
 - Aggregations on scopes
 - Nested aggregations
 
