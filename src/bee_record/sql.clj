@@ -272,8 +272,7 @@
   (let [assoc-queries (->> associations
                            (map #(assoc->query definition %))
                            (into {}))]
-    (delay
-     (assoc definition
-            :from [table]
-            :select (fields-to definition fields)
-            :queries (merge queries assoc-queries)))))
+    (assoc definition
+           :from [table]
+           :select (fields-to definition fields)
+           :queries (merge queries assoc-queries))))
