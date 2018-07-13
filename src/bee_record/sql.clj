@@ -200,8 +200,13 @@
                                          {:model model :query-name query-name}))))]
     (apply scope-fn model args)))
 
-(defn- aggregate [parents children query-name get-parent get-child]
-  (let [grouped (group-by get-child children)
+(defn- fns-for-aggregation [agg-fields]
+  [(apply juxt (keys agg-fields))
+   (apply juxt (vals agg-fields))])
+
+(defn- aggregate [parents children query-name agg-fields]
+  (let [[get-parent get-child] (fns-for-aggregation agg-fields)
+        grouped (group-by get-child children)
         associate #(let [key-to-search (get-parent %)
                          children (get grouped key-to-search ())]
                      (assoc % query-name children))]
@@ -228,13 +233,11 @@
     (assoc model :after-query
            (fn [parents db]
              (reduce (fn [results [query-name queried agg-fields]]
-                       (let [get-parent (apply juxt (keys agg-fields))
-                             get-child (apply juxt (vals agg-fields))
-                             with-res (:with-results queried)
+                       (let [with-res (:with-results queried)
                              children (if with-res
                                         (query (with-res parents) db)
                                         (query queried db))]
-                         (aggregate results children query-name get-parent get-child)))
+                         (aggregate results children query-name agg-fields)))
                      parents
                      fields)))))
 
