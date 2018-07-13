@@ -33,8 +33,8 @@ Then, we can query things:
 * [ ] There is no error treatment. When something go wrong, we'll probably get a Null Pointer Exception. It would be good to have an error, like "your association doesn't exist", or something
 ** [x] Error treatment for invalid/unexisting associations
 * [ ] There is no "UPDATE" or "INSERT" APIs yet. It would be good to implement a Changeset pattern like ECTO
-* [ ] Scopes
-* [ ] Preloading of Scopes
+* [x] Scopes
+* [x] Preloading of Scopes
 
 ## License
 
