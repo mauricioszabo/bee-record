@@ -8,8 +8,6 @@
   (sql/model {:table :people
               :pk :id
               :fields [:id :name :age]
-              ; :associations {:accounts {:model (delay accounts)
-              ;                           :on {:id :user-id}}}
               :queries {:by-ids {:fn (fn [model]
                                        (sql/where people [:in :id (sql/select model [:id])]))
                                   :aggregation {:people/id :people/id}}
@@ -20,6 +18,7 @@
                                                 (sql/where [:in :id (map :people/id %)]))))
                                    :aggregation {:people/id :people/id}}}}))
 
+(reset! sql/logging #(println (first %) "\n" (vec (rest %))))
 (fact "will preload (with another query) defined queries"
   (with-prepared-db
     (-> people
@@ -77,3 +76,44 @@
         {:people/id 2 :people/age 20
          :by-ids [{:people/id 2 :people/name "Bar" :people/age 20
                    :same-ids [{:people/id 2}]}]}]))
+
+(def accounts (sql/model {:table :accounts
+                          :pk :id
+                          :fields [:id :account :user-id]
+                          :associations {:person {:model people
+                                                  :on {:user-id :id}}}}))
+
+(facts "will generate a scope for associations"
+  (fact "will allow us to query by model"
+    (with-prepared-db
+      (-> accounts
+          (sql/return :join-person)
+          (sql/query db)))
+    => [{:people/id 1 :people/name "Foo" :people/age 10}])
+
+  (fact "will allow us to preload by model"
+    (with-prepared-db
+      (-> accounts
+          (sql/with :join-person)
+          (sql/query db)))
+    => [{:accounts/id 1 :accounts/account "twitter" :accounts/user-id 1
+         :join-person [{:people/id 1 :people/name "Foo" :people/age 10}]}
+        {:accounts/id 2 :accounts/account "fb" :accounts/user-id 1
+         :join-person [{:people/id 1 :people/name "Foo" :people/age 10}]}])
+
+  (fact "will allow us to query by results"
+    (with-prepared-db
+      (-> accounts
+          (sql/return :person)
+          (sql/query db)))
+    => [{:people/id 1 :people/name "Foo" :people/age 10}])
+
+  (fact "will allow us to preload by results"
+    (with-prepared-db
+      (-> accounts
+          (sql/with :person)
+          (sql/query db)))
+    => [{:accounts/id 1 :accounts/account "twitter" :accounts/user-id 1
+         :join-person [{:people/id 1 :people/name "Foo" :people/age 10}]}
+        {:accounts/id 2 :accounts/account "fb" :accounts/user-id 1
+         :join-person [{:people/id 1 :people/name "Foo" :people/age 10}]}]))

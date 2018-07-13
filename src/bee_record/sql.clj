@@ -1,5 +1,5 @@
 (ns bee-record.sql
-  (:refer-clojure :exclude [select find])
+  (:refer-clojure :exclude [select find distinct])
   (:require [honeysql.core :as honey]
             [clojure.string :as str]
             [clojure.java.jdbc :as jdbc]
@@ -25,11 +25,6 @@
                    (fn [field] [(keyword (str/replace (name field) #"-" "_")) field]))]
     (mapv #(cond-> % (not (coll? %)) to-field) fields)))
 
-(defn model [{:keys [table pk fields] :as definition}]
-  (assoc definition
-         :from [table]
-         :select (fields-to definition fields)))
-
 (defn to-sql [model]
   (honey/format model
                 :quoting @quoting
@@ -37,6 +32,9 @@
 
 (defn select [model fields]
   (assoc model :select (fields-to model fields)))
+
+(defn distinct [model]
+  (update model :modifiers #(set (conj % "DISTINCT"))))
 
 (defn select+ [model fields]
   (let [new-fields (fields-to model fields)]
@@ -239,3 +237,20 @@
                          (aggregate results children query-name get-parent get-child)))
                      parents
                      fields)))))
+
+(defn- assoc->query [[k v]]
+  (let [join-name (->> k name (str "join-") keyword)
+        agg (-> v :aggregation (or (:on v)))]
+    {join-name {:fn (fn [model]
+                     (-> model
+                         (join :inner k)
+                         (select (-> v :model :select))
+                         distinct))
+                :aggregation agg}}))
+
+(defn model [{:keys [table pk fields associations queries] :as definition}]
+  (let [assoc-queries (->> associations (map assoc->query) (into {}))]
+    (assoc definition
+           :from [table]
+           :select (fields-to definition fields)
+           :queries (merge queries assoc-queries))))
