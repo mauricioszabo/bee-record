@@ -1,4 +1,4 @@
-(defproject bee-record "0.0.5-SNAPSHOT"
+(defproject bee-record "0.1.0"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -7,4 +7,5 @@
                  [honeysql "0.9.2"]
                  [org.clojure/java.jdbc "0.7.7"]]
   :profiles {:dev {:dependencies [[midje "1.9.1"]
-                                  [org.hsqldb/hsqldb "2.4.0"]]}})
+                                  [org.hsqldb/hsqldb "2.4.0"]]
+                   :plugins [[lein-midje "3.2.1"]]}})

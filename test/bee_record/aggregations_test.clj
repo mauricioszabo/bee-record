@@ -47,7 +47,7 @@
    (before :facts (do
                     (reset! no-queries 0)
                     (reset! sql/logging (fn [query] (swap! no-queries inc)))))
-   (after :facts (reset! sql/logging #(do (print "QUERY" (str/trim (first %)) " ") (prn (vec (rest %))))))))
+   (after :facts (reset! sql/logging nil))))
 
 (def people-more-scopes
   (assoc-in people [:queries :ids2] (-> people :queries :by-ids)))
@@ -62,4 +62,18 @@
     => [{:people/id 1 :people/name "Foo"
          :by-ids [{:people/id 1 :people/name "Foo" :people/age 10}]
          :same-ids [{:people/id 1}]
-         :ids2 [{:people/id 1 :people/name "Foo" :people/age 10}]}]))
+         :ids2 [{:people/id 1 :people/name "Foo" :people/age 10}]}])
+
+  (fact "will preload maps (nested preload)"
+    (with-prepared-db
+      (-> people-more-scopes
+          (sql/select [:id :age])
+          (sql/where [:in :id [1 2]])
+          (sql/with {:by-ids {:same-ids {}}})
+          (sql/query db)))
+    => [{:people/id 1 :people/age 10
+         :by-ids [{:people/id 1 :people/name "Foo" :people/age 10
+                   :same-ids [{:people/id 1}]}]}
+        {:people/id 2 :people/age 20
+         :by-ids [{:people/id 2 :people/name "Bar" :people/age 20
+                   :same-ids [{:people/id 2}]}]}]))
