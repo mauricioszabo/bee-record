@@ -12,7 +12,7 @@
   (keyword (str table "." (str/replace (name field) #"-" "_"))))
 
 (defn- as-namespaced-field [table field]
-  (keyword (str table "/" (name field))))
+  (keyword table (name field)))
 
 (defn- as-table [model]
   (name (or (:table model) (-> model :from first))))
@@ -241,18 +241,37 @@
                      parents
                      fields)))))
 
-(defn- assoc->query [[k v]]
+(defn- assoc->query [model [k v]]
   (let [join-name (->> k name (str "join-") keyword)
-        agg (-> v :aggregation (or (:on v)))]
-    {join-name {:fn (fn [model]
-                     (-> model
-                         (join :inner k)
-                         (select (-> v :model :select))
-                         distinct))
-                :aggregation agg}}))
+        p-name (as-table model)
+        a-name (as-table (-> model :associations k :model))
+        agg (-> v :aggregation (or (->> v
+                                        :on
+                                        (map (fn [[k v]] [(as-namespaced-field p-name k)
+                                                          (as-namespaced-field a-name v)]))
+                                        (into {}))))]
+    {join-name {:aggregation agg
+                :fn (fn [model]
+                      (-> model
+                          (join :inner k)
+                          (select (-> v :model :select))
+                          distinct))}
+
+     k {:aggregation agg
+        :fn (fn [model]
+              (with-results model
+                (fn [results]
+                  (let [assoc-model (get-in model [:associations k :model])
+                        conds (map (fn [[current agg]]
+                                     [:in agg (map current results)])
+                                   agg)]
+
+                    (where assoc-model (cons :and conds))))))}}))
 
 (defn model [{:keys [table pk fields associations queries] :as definition}]
-  (let [assoc-queries (->> associations (map assoc->query) (into {}))]
+  (let [assoc-queries (->> associations
+                           (map #(assoc->query definition %))
+                           (into {}))]
     (assoc definition
            :from [table]
            :select (fields-to definition fields)

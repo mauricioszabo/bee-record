@@ -114,6 +114,6 @@
           (sql/with :person)
           (sql/query db)))
     => [{:accounts/id 1 :accounts/account "twitter" :accounts/user-id 1
-         :join-person [{:people/id 1 :people/name "Foo" :people/age 10}]}
+         :person [{:people/id 1 :people/name "Foo" :people/age 10}]}
         {:accounts/id 2 :accounts/account "fb" :accounts/user-id 1
-         :join-person [{:people/id 1 :people/name "Foo" :people/age 10}]}]))
+         :person [{:people/id 1 :people/name "Foo" :people/age 10}]}]))
