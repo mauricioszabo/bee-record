@@ -1,6 +1,10 @@
 # Change Log
 
-## [Unreleased]
+## 0.1.0
+- Aggregations on scopes
+- Nested aggregations
+
+## 0.0.5
 ### Added
 - Simple queries like `select`, `where`, `restrict`, and `join`
 - `model` to generate a "Bee Model", that'll ease queries
