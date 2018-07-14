@@ -11,7 +11,7 @@
               :pk :id
               :fields [:id :name :age]
               :associations {:accounts {:model (delay accounts)
-                                        :on {:id :user-id}}}
+                                        :on {:people/id :accounts/user-id}}}
               :queries {:adults {:fn (fn [people age]
                                        (sql/restrict people [:>= :age age]))}}}))
 
@@ -21,7 +21,7 @@
                           :associations {:person {:model people
                                                   :on {:user-id :id}}
                                          :logins {:model (delay logins)
-                                                  :on {:id :account-id}}}}))
+                                                  :on {:accounts/id :logins/account-id}}}}))
 (def logins (sql/model {:table :logins
                         :pk :id
                         :fields [:login]}))
