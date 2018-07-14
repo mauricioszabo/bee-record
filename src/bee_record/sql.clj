@@ -1,5 +1,5 @@
 (ns bee-record.sql
-  (:refer-clojure :exclude [select find])
+  (:refer-clojure :exclude [select find distinct])
   (:require [honeysql.core :as honey]
             [clojure.string :as str]
             [clojure.java.jdbc :as jdbc]
@@ -12,7 +12,7 @@
   (keyword (str table "." (str/replace (name field) #"-" "_"))))
 
 (defn- as-namespaced-field [table field]
-  (keyword (str table "/" (name field))))
+  (keyword table (name field)))
 
 (defn- as-table [model]
   (name (or (:table model) (-> model :from first))))
@@ -25,11 +25,6 @@
                    (fn [field] [(keyword (str/replace (name field) #"-" "_")) field]))]
     (mapv #(cond-> % (not (coll? %)) to-field) fields)))
 
-(defn model [{:keys [table pk fields] :as definition}]
-  (assoc definition
-         :from [table]
-         :select (fields-to definition fields)))
-
 (defn to-sql [model]
   (honey/format model
                 :quoting @quoting
@@ -37,6 +32,9 @@
 
 (defn select [model fields]
   (assoc model :select (fields-to model fields)))
+
+(defn distinct [model]
+  (update model :modifiers #(set (conj % "DISTINCT"))))
 
 (defn select+ [model fields]
   (let [new-fields (fields-to model fields)]
@@ -95,12 +93,6 @@
 (def ^:private joins {:inner :join
                       :left :left-join
                       :right :right-join})
-(defn- normalize-join-map [table other conds]
-  (->> conds
-       (map (fn [[k v]] [(normalize-field {:table table} k)
-                         (normalize-field {:table other} v)]))
-       (into {})
-       (norm-conditions {})))
 
 (defn- merge-joins [m1 m2]
   (merge-with #(vec (concat %1 %2)) m1 m2))
@@ -111,10 +103,7 @@
   ([model kind foreign-table conditions]
    (let [ft-name (cond-> foreign-table (coll? foreign-table) last)
          join-model {(joins kind)
-                     [foreign-table
-                      (if (map? conditions)
-                        (normalize-join-map (:table model) ft-name conditions)
-                        (norm-conditions model conditions))]}]
+                     [foreign-table (norm-conditions model conditions)]}]
      (merge-joins model join-model))))
 
 (defn- table-to-assoc-join [model]
@@ -202,8 +191,13 @@
                                          {:model model :query-name query-name}))))]
     (apply scope-fn model args)))
 
-(defn- aggregate [parents children query-name get-parent get-child]
-  (let [grouped (group-by get-child children)
+(defn- fns-for-aggregation [agg-fields]
+  [(apply juxt (keys agg-fields))
+   (apply juxt (vals agg-fields))])
+
+(defn- aggregate [parents children query-name agg-fields]
+  (let [[get-parent get-child] (fns-for-aggregation agg-fields)
+        grouped (group-by get-child children)
         associate #(let [key-to-search (get-parent %)
                          children (get grouped key-to-search ())]
                      (assoc % query-name children))]
@@ -230,12 +224,48 @@
     (assoc model :after-query
            (fn [parents db]
              (reduce (fn [results [query-name queried agg-fields]]
-                       (let [get-parent (apply juxt (keys agg-fields))
-                             get-child (apply juxt (vals agg-fields))
-                             with-res (:with-results queried)
+                       (let [with-res (:with-results queried)
                              children (if with-res
                                         (query (with-res parents) db)
                                         (query queried db))]
-                         (aggregate results children query-name get-parent get-child)))
+                         (aggregate results children query-name agg-fields)))
                      parents
                      fields)))))
+
+(defn assoc->query-with-results [agg assoc-name]
+  (fn [parent-model]
+    (with-results parent-model
+      (fn [results]
+        (let [agg-model (get-assoc-model parent-model assoc-name {})
+              aggregate-things (fn [result a [parent child]] (update a child conj (parent result)))
+              mapped-results (loop [[result & rest] results
+                                    acc {}]
+                               (if result
+                                 (recur rest (reduce (partial aggregate-things result) acc agg))
+                                 acc))
+              conds (->> mapped-results
+                         (map #(vec (cons :in %)))
+                         (cons :and))]
+          (restrict agg-model conds))))))
+
+(defn- assoc->query [model [k specs]]
+  (let [join-name (->> k name (str "join-") keyword)
+        agg (-> specs :aggregation (or (:on specs)))]
+    {join-name {:aggregation agg
+                :fn (fn [queried]
+                      (-> queried
+                          (join :inner k)
+                          (select (:select (get-assoc-model model k {})))
+                          distinct))}
+
+     k {:aggregation agg
+        :fn (assoc->query-with-results agg k)}}))
+
+(defn model [{:keys [table pk fields associations queries] :as definition}]
+  (let [assoc-queries (->> associations
+                           (map #(assoc->query definition %))
+                           (into {}))]
+    (assoc definition
+           :from [table]
+           :select (fields-to definition fields)
+           :queries (merge queries assoc-queries))))
