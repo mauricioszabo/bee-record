@@ -232,11 +232,12 @@
                      parents
                      fields)))))
 
-(defn assoc->query-with-results [agg agg-model]
+(defn assoc->query-with-results [agg assoc-name]
   (fn [parent-model]
     (with-results parent-model
       (fn [results]
-        (let [aggregate-things (fn [result a [parent child]] (update a child conj (parent result)))
+        (let [agg-model (get-assoc-model parent-model assoc-name {})
+              aggregate-things (fn [result a [parent child]] (update a child conj (parent result)))
               mapped-results (loop [[result & rest] results
                                     acc {}]
                                (if result
@@ -258,7 +259,7 @@
                           distinct))}
 
      k {:aggregation agg
-        :fn (assoc->query-with-results agg (get-assoc-model model k {}))}}))
+        :fn (assoc->query-with-results agg k)}}))
 
 (defn model [{:keys [table pk fields associations queries] :as definition}]
   (let [assoc-queries (->> associations
