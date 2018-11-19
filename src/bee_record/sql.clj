@@ -8,8 +8,8 @@
 (def quoting (atom :ansi))
 (def logging (atom nil))
 
-(defn- as-sql-field [table field]
-  (keyword (str table "." (str/replace (name field) #"-" "_"))))
+(defn- as-sql-field [{:keys [translate-field translate-table] :as f} table field]
+  (keyword (str (translate-table table) "." (translate-field (name field)))))
 
 (defn- as-namespaced-field [table field]
   (keyword table (name field)))
@@ -19,10 +19,11 @@
 
 (defn- fields-to [model fields]
   (let [table (as-table model)
+        {:keys [translate-field]} model
         to-field (if table
-                   (fn [field] [(as-sql-field table field)
+                   (fn [field] [(as-sql-field model table field)
                                 (as-namespaced-field table field)])
-                   (fn [field] [(keyword (str/replace (name field) #"-" "_")) field]))]
+                   (fn [field] [(keyword (translate-field (name field))) field]))]
     (mapv #(cond-> % (not (coll? %)) to-field) fields)))
 
 (defn to-sql [model]
@@ -49,7 +50,7 @@
     (namespace field) (-> field
                           (str/replace #"/" ".")
                           (str/replace #"^:" "")
-                          (str/replace #"-" "_")
+                          ((:translate-field model))
                           keyword)
 
     :else (as-sql-field (as-table model) field)))
@@ -308,8 +309,11 @@ to write a bit more too:
 (defn model [{:keys [table pk fields associations queries] :as definition}]
   (let [assoc-queries (->> associations
                            (map #(assoc->query definition %))
-                           (into {}))]
-    (assoc definition
-           :from [table]
-           :select (fields-to definition fields)
-           :queries (merge queries assoc-queries))))
+                           (into {}))
+        new-definition (assoc definition
+                              :translate-table #(str/replace % #"-" "_")
+                              :translate-field #(str/replace % #"-" "_"))]
+    (assoc new-definition
+           :select (fields-to new-definition fields)
+           :queries (merge queries assoc-queries)
+           :from [(keyword ((:translate-table new-definition) (name table)))])))
