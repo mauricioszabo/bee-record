@@ -76,3 +76,10 @@
                 [:in :pets.name ["Rex" "Dog"]]
                 [:in :pets.name {:select [:common/pets]
                                  :from [:common/names]}]]}))
+
+(facts "about non-entity fields"
+  (fact "will be ignored on the select clause"
+    (parse {:select [["wow" :some-str] :person/name :pet/name]})
+    => {:select [["wow" :some-str] [:people.name :person/name] [:pets.name :pet/name]]
+        :from [:people]
+        :join [:pets [:= :pets.people_id :people.id]]}))

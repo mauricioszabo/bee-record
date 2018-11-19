@@ -77,7 +77,9 @@
        (filter #(and (keyword? %) (namespace %)))))
 
 (defn- prepare-joins [mapping query join-tree]
-  (loop [[prev-field field & rest] (concat (:select query) (where-fields (:where query)))
+  (loop [[prev-field field & rest] (->> (where-fields (:where query))
+                                        (concat (:select query))
+                                        (filter #(table-for-entity-field mapping %)))
          entities #{(-> prev-field namespace keyword)}
          joins []]
     (let [entity (some-> field namespace keyword)]
@@ -126,9 +128,9 @@
             joins (prepare-joins mapping query join-tree)
             where (prepare-where mapping where)
             first-entity (->> select
-                              (map #(get-in mapping [:entities (-> % namespace keyword)]))
-                              (filter identity)
-                              first)]
+                          (filter #(table-for-entity-field mapping %))
+                          first
+                          (#(get-in mapping [:entities (-> % namespace keyword)])))]
         (cond-> (assoc first-entity :select (map #(field->select mapping %) select))
                 (not-empty where) (assoc :where where)
                 (not-empty joins) (assoc :join joins))))))
