@@ -43,15 +43,36 @@
   => {:select [[:people.id :person/id] [:people.name :person/name]]
       :from [:people]})
 
-(facts "when generating a query with a direct join"
+(facts "will generate a query with a direct join"
   (parse {:select [:person/name :pet/color :pet/race]})
   => {:select [[:people.name :person/name] [:pets.color :pet/color] [:pets.race :pet/race]]
       :from [:people]
       :join [:pets [:= :pets.people_id :people.id]]})
 
-(facts "when generating a query with indirect joins"
+(facts "will generate a query with indirect joins"
   (parse {:select [:person/name :record/sickness]})
   => {:select [[:people.name :person/name] [:medicalrecord.sickness :record/sickness]]
       :from [:people]
       :join [:pets [:= :pets.people_id :people.id]
              :medicalrecord [:= :pets.id :medicalrecord.pet_id]]})
+
+(facts "when generating a query with filters"
+  (fact "add joins when filtering for fields on another entity"
+    (parse {:select [:person/name] :where [:= :pet/name "Rex"]})
+    => {:select [[:people.name :person/name]]
+        :from [:people]
+        :join [:pets [:= :pets.people_id :people.id]]
+        :where [:= :pets.name "Rex"]})
+
+  (fact "will not normalize fields for 'in' queries"
+    (parse {:select [:person/name] :where [:or
+                                           [:in :pet/name ["Rex" "Dog"]]
+                                           [:in :pet/name {:select [:common/pets]
+                                                           :from [:common/names]}]]})
+    => {:select [[:people.name :person/name]]
+        :from [:people]
+        :join [:pets [:= :pets.people_id :people.id]]
+        :where [:or
+                [:in :pets.name ["Rex" "Dog"]]
+                [:in :pets.name {:select [:common/pets]
+                                 :from [:common/names]}]]}))

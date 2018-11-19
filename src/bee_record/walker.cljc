@@ -1,5 +1,6 @@
 (ns bee-record.walker
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [clojure.walk :as walk]))
 
 (defn- table-for [entity]
   (let [from (:from entity)]
@@ -49,13 +50,17 @@
       (vector? from) (let [from-part (first from)]
                        (if (vector? from-part) (second from-part) from-part)))))
 
-(defn field->select [mapping field]
-  (let [table-name (-> mapping
-                       (get-in [:entities (keyword (namespace field))])
-                       table-name
-                       name)
-        table-field (->> field name (str table-name ".") keyword)]
-    [table-field field]))
+(defn- table-for-entity-field [mapping field]
+  (when (keyword? field)
+    (some-> mapping
+            (get-in [:entities (keyword (namespace field))])
+            table-name
+            name)))
+
+(defn- field->select [mapping field]
+  (if-let [table-name (table-for-entity-field mapping field)]
+    [(->> field name (str table-name ".") keyword) field]
+    field))
 
 (defn- entities-and-joins [ents-joins join-tree prev-entity entity]
   (let [[entities joins] ents-joins
@@ -66,19 +71,31 @@
           (entities-and-joins join-tree join-in-tree entity))
       [(conj entities entity) (apply conj joins join-in-tree)])))
 
+(defn- where-fields [where]
+  (->> where
+       (tree-seq sequential? not-empty)
+       (filter #(and (keyword? %) (namespace %)))))
+
 (defn- prepare-joins [mapping query join-tree]
-  (loop [[prev-field field & rest] (:select query)
+  (loop [[prev-field field & rest] (concat (:select query) (where-fields (:where query)))
          entities #{(-> prev-field namespace keyword)}
          joins []]
-    (if-let [entity (some-> field namespace keyword)]
-      (if (contains? entities entity)
-        (recur rest entities joins)
-        (let [[es js] (entities-and-joins [entities joins]
-                                          join-tree
-                                          (-> prev-field namespace keyword)
-                                          entity)]
-          (recur (cons field rest) es js)))
-      joins)))
+    (let [entity (some-> field namespace keyword)]
+      (cond
+        (nil? field) joins
+
+        (nil? entity) (throw (ex-info "Didn't find entity for field"
+                                      {:field field
+                                       :know-entities (-> mapping :entities keys)}))
+
+        (contains? entities entity) (recur rest entities joins)
+
+        :else (let [[es js] (entities-and-joins [entities joins]
+                                                join-tree
+                                                (-> prev-field namespace keyword)
+                                                entity)]
+                (recur (cons field rest) es js))))))
+
 
 (defn parse-query [mapping query]
   (let [{:keys [select]} query
@@ -90,14 +107,28 @@
     (cond-> (assoc first-entity :select (map #(field->select mapping %) select))
             (not-empty joins) (assoc :join joins))))
 
+(defn- field->where-field [mapping field]
+  (if-let [table-name (table-for-entity-field mapping field)]
+    (->> field name (str table-name ".") keyword)
+    field))
+
+(defn- prepare-where [mapping where]
+  (let [prepare (fn [field]
+                  (if (sequential? field)
+                    (prepare-where mapping field)
+                    (field->where-field mapping field)))]
+    (mapv prepare where)))
+
 (defn parser-for [mapping]
   (let [join-tree (create-hierarchy mapping)]
     (fn [query]
-      (let [{:keys [select]} query
+      (let [{:keys [select where]} query
             joins (prepare-joins mapping query join-tree)
+            where (prepare-where mapping where)
             first-entity (->> select
                               (map #(get-in mapping [:entities (-> % namespace keyword)]))
                               (filter identity)
                               first)]
         (cond-> (assoc first-entity :select (map #(field->select mapping %) select))
+                (not-empty where) (assoc :where where)
                 (not-empty joins) (assoc :join joins))))))
