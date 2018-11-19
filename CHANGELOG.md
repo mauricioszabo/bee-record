@@ -5,6 +5,8 @@
 - Scopes can be used with `with` aggregation
 - Aggregations on scopes
 - Nested aggregations
+- Fixed a bug on tables
+- Added `walker` namespace
 
 ## 0.0.5
 ### Added
