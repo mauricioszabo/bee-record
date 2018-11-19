@@ -55,10 +55,3 @@
       :from [:people]
       :join [:pets [:= :pets.people_id :people.id]
              :medicalrecord [:= :pets.id :medicalrecord.pet_id]]})
-
-; (require '[honeysql.core :as honey])
-; ; ;
-; (honey/format {:select [[:people.name :person/name] [:medicalrecord.sickness :record/sickness]]
-;                :from [:people]
-;                :join [[:pets] [:= :pets.people_id :people.id]
-;                       :medicalrecord [:= :pets.id :medicalrecord.pet_id]]})
