@@ -58,17 +58,21 @@
             name)))
 
 (defn- field->select [mapping field]
-  (cond
-    (instance? honeysql.types.SqlCall field)
-    (update field :args (fn [args] (map #(->> % (field->select mapping) first) args)))
+  (let [get-field-part #(if (vector? %) (first %) %)]
+    (cond
+      (instance? honeysql.types.SqlCall field)
+      (update field :args #(field->select mapping %))
 
-    (vector? field)
-    [(->> field first (field->select mapping) first) (second field)]
+      (list? field)
+      (map #(->> % (field->select mapping) get-field-part) field)
 
-    :else
-    (if-let [table-name (table-for-entity-field mapping field)]
-      [(->> field name (str table-name ".") keyword) field]
-      field)))
+      (vector? field)
+      [(->> field first (field->select mapping) get-field-part) (second field)]
+
+      :else
+      (if-let [table-name (table-for-entity-field mapping field)]
+        [(->> field name (str table-name ".") keyword) field]
+        field))))
 
 (defn- entities-and-joins [ents-joins join-tree prev-entity entity]
   (let [[entities joins] ents-joins
@@ -89,9 +93,10 @@
                    (cond
                      (instance? honeysql.types.SqlCall field) (:args field)
                      (vector? field) (take 1 field)
-                     (keyword? field) [field]
-                     :else []))]
-    (mapcat child-fn select)))
+                     :else field))]
+    (->> select
+         (tree-seq #(and (coll? %) (not-empty %)) child-fn)
+         (filter keyword?))))
 
 (defn- prepare-joins [mapping query join-tree]
   (loop [[prev-field field & rest] (->> (where-fields query)

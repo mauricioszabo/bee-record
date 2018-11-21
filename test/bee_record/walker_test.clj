@@ -55,6 +55,18 @@
   (fact "will normalize fields on sql functions"
     (parse {:select [#sql/call (count :person/id)]})
     => {:select [#sql/call (count :people.id)]
+        :from [:people]}
+
+    (parse {:select [[#sql/call (count :id) :foo]]})
+    => {:select [[#sql/call (count :id) :foo]]})
+
+  (fact "will normalize IF (complex select)"
+    (parse {:select [#sql/call (if #sql/call [:> (count :person/id) 1]
+                                 "foo"
+                                 "bar")]})
+    => {:select [#sql/call (if #sql/call [:> (count :people.id) 1]
+                             "foo"
+                             "bar")]
         :from [:people]}))
 
 (facts "will generate a query with a direct join"
