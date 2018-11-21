@@ -58,9 +58,17 @@
             name)))
 
 (defn- field->select [mapping field]
-  (if-let [table-name (table-for-entity-field mapping field)]
-    [(->> field name (str table-name ".") keyword) field]
-    field))
+  (cond
+    (instance? honeysql.types.SqlCall field)
+    (update field :args (fn [args] (map #(->> % (field->select mapping) first) args)))
+
+    (vector? field)
+    [(->> field first (field->select mapping) first) (second field)]
+
+    :else
+    (if-let [table-name (table-for-entity-field mapping field)]
+      [(->> field name (str table-name ".") keyword) field]
+      field)))
 
 (defn- entities-and-joins [ents-joins join-tree prev-entity entity]
   (let [[entities joins] ents-joins
@@ -71,16 +79,25 @@
           (entities-and-joins join-tree join-in-tree entity))
       [(conj entities entity) (apply conj joins join-in-tree)])))
 
-(defn- where-fields [where]
+(defn- where-fields [{:keys [where]}]
   (->> where
        (tree-seq sequential? not-empty)
        (filter #(and (keyword? %) (namespace %)))))
 
+(defn select-fields [{:keys [select]}]
+  (let [child-fn (fn [field]
+                   (cond
+                     (instance? honeysql.types.SqlCall field) (:args field)
+                     (vector? field) (take 1 field)
+                     (keyword? field) [field]
+                     :else []))]
+    (mapcat child-fn select)))
+
 (defn- prepare-joins [mapping query join-tree]
-  (loop [[prev-field field & rest] (->> (where-fields (:where query))
-                                        (concat (:select query))
+  (loop [[prev-field field & rest] (->> (where-fields query)
+                                        (concat (select-fields query))
                                         (filter #(table-for-entity-field mapping %)))
-         entities #{(-> prev-field namespace keyword)}
+         entities #{(some-> prev-field namespace keyword)}
          joins []]
     (let [entity (some-> field namespace keyword)]
       (cond
@@ -98,16 +115,6 @@
                                                 entity)]
                 (recur (cons field rest) es js))))))
 
-
-(defn parse-query [mapping query]
-  (let [{:keys [select]} query
-        joins (prepare-joins mapping query (create-hierarchy mapping))
-        first-entity (->> select
-                         (map #(get-in mapping [:entities (-> % namespace keyword)]))
-                         (filter identity)
-                         first)]
-    (cond-> (assoc first-entity :select (map #(field->select mapping %) select))
-            (not-empty joins) (assoc :join joins))))
 
 (defn- field->where-field [mapping field]
   (if-let [table-name (table-for-entity-field mapping field)]
@@ -127,10 +134,10 @@
       (let [{:keys [select where]} query
             joins (prepare-joins mapping query join-tree)
             where (prepare-where mapping where)
-            first-entity (->> select
-                          (filter #(table-for-entity-field mapping %))
-                          first
-                          (#(get-in mapping [:entities (-> % namespace keyword)])))]
+            first-entity (some->> (select-fields query)
+                                  (filter #(table-for-entity-field mapping %))
+                                  first
+                                  (#(get-in mapping [:entities (-> % namespace keyword)])))]
         (cond-> (assoc first-entity :select (map #(field->select mapping %) select))
                 (not-empty where) (assoc :where where)
                 (not-empty joins) (assoc :join joins))))))

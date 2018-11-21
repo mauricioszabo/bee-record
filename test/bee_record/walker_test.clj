@@ -38,10 +38,24 @@
                 :pet :diag
                 :person :pet}}))
 
-(fact "will generate a honey query with from"
-  (parse {:select [:person/id :person/name]})
-  => {:select [[:people.id :person/id] [:people.name :person/name]]
-      :from [:people]})
+(facts "about mapping of identities to DB fields"
+  (fact "will generate a select without from if not entity is found"
+    (parse {:select ["foo"]}) => {:select ["foo"]})
+
+  (fact "will generate a honey query with from"
+    (parse {:select [:person/id :person/name]})
+    => {:select [[:people.id :person/id] [:people.name :person/name]]
+        :from [:people]})
+
+  (fact "will generate a honey query with alias on select"
+    (parse {:select [[:person/id :pet/name]]})
+    => {:select [[:people.id :pet/name]]
+        :from [:people]})
+
+  (fact "will normalize fields on sql functions"
+    (parse {:select [#sql/call (count :person/id)]})
+    => {:select [#sql/call (count :people.id)]
+        :from [:people]}))
 
 (facts "will generate a query with a direct join"
   (parse {:select [:person/name :pet/color :pet/race]})
