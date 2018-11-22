@@ -53,7 +53,7 @@
                           ((:translate-field model))
                           keyword)
 
-    :else (as-sql-field (as-table model) field)))
+    :else (as-sql-field model (as-table model) field)))
 
 (defn- normalize-fields [model [op & rest]]
   (let [norm (->> rest
