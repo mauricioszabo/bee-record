@@ -94,7 +94,9 @@
                      (instance? honeysql.types.SqlCall field) (:args field)
                      (vector? field) (take 1 field)
                      :else field))]
+
     (->> select
+         seq
          (tree-seq #(and (coll? %) (not-empty %)) child-fn)
          (filter keyword?))))
 
