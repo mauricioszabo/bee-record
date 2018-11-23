@@ -128,23 +128,35 @@
     (->> field name (str table-name ".") keyword)
     field))
 
-(defn- prepare-where [mapping where]
+(defn- prepare-fields [mapping where]
   (let [prepare (fn [field]
                   (if (sequential? field)
-                    (prepare-where mapping field)
+                    (prepare-fields mapping field)
                     (field->where-field mapping field)))]
     (mapv prepare where)))
 
 (defn parser-for [mapping]
   (let [join-tree (create-hierarchy mapping)]
     (fn [query]
-      (let [{:keys [select where]} query
+      (def mapping mapping)
+      (def join-tree join-tree)
+      (def query query)
+      (let [{:keys [select where having group-by order-by]} query
             joins (prepare-joins mapping query join-tree)
-            where (prepare-where mapping where)
+            where (prepare-fields mapping where)
+            having (prepare-fields mapping having)
+            group (prepare-fields mapping group-by)
+            order (prepare-fields mapping order-by)
             first-entity (some->> (select-fields query)
                                   (filter #(table-for-entity-field mapping %))
                                   first
-                                  (#(get-in mapping [:entities (-> % namespace keyword)])))]
-        (cond-> (assoc first-entity :select (map #(field->select mapping %) select))
+                                  (#(get-in mapping [:entities (-> % namespace keyword)])))
+            honey (-> query
+                      (merge first-entity)
+                      (assoc :select (map #(field->select mapping %) select)))]
+        (cond-> honey
                 (not-empty where) (assoc :where where)
+                (not-empty having) (assoc :having having)
+                (not-empty group) (assoc :group-by group)
+                (not-empty order) (assoc :order-by order)
                 (not-empty joins) (assoc :join joins))))))
