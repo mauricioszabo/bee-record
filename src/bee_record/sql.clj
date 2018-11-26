@@ -8,8 +8,8 @@
 (def quoting (atom :ansi))
 (def logging (atom nil))
 
-(defn- as-sql-field [table field]
-  (keyword (str table "." (str/replace (name field) #"-" "_"))))
+(defn- as-sql-field [{:keys [translate-field translate-table] :as f} table field]
+  (keyword (str (translate-table table) "." (translate-field (name field)))))
 
 (defn- as-namespaced-field [table field]
   (keyword table (name field)))
@@ -19,10 +19,11 @@
 
 (defn- fields-to [model fields]
   (let [table (as-table model)
+        {:keys [translate-field]} model
         to-field (if table
-                   (fn [field] [(as-sql-field table field)
+                   (fn [field] [(as-sql-field model table field)
                                 (as-namespaced-field table field)])
-                   (fn [field] [(keyword (str/replace (name field) #"-" "_")) field]))]
+                   (fn [field] [(keyword (translate-field (name field))) field]))]
     (mapv #(cond-> % (not (coll? %)) to-field) fields)))
 
 (defn to-sql [model]
@@ -49,10 +50,10 @@
     (namespace field) (-> field
                           (str/replace #"/" ".")
                           (str/replace #"^:" "")
-                          (str/replace #"-" "_")
+                          ((:translate-field model))
                           keyword)
 
-    :else (as-sql-field (as-table model) field)))
+    :else (as-sql-field model (as-table model) field)))
 
 (defn- normalize-fields [model [op & rest]]
   (let [norm (->> rest
@@ -99,6 +100,50 @@
 
 (declare association-join)
 (defn join
+  "Joins one or more models. Kind is one of :inner, :left or :right to generate
+an INNER, LEFT or RIGHT JOIN.
+
+There are two ways of joining tables. First is to pass one
+or multiple associations (in the associations parameters). The
+second is to pass a foreign table, and conditions for the join.
+
+Passing associations uses the following kind: you can join multiple associations
+with the current model using a vector of associations:
+
+(join people :inner :children) ; All people that have children
+(join people :left [:children :dogs]) ; All people, with their children and dogs
+
+If we want to \"nest associations\", we can pass a map:
+
+; All people that have children, and their children have one or more dogs:
+(join people :inner {:children :dogs})
+
+We can pass options to the join too, using the format:
+{:association {:opts {...}}}
+
+Possible parameters are :with-model, :kind, and :include-fields.
+
+; Will use model `adult-people` to join. This means that it'll change
+; the join table, and quite possibly will join with a subselect
+(join people :inner {:children {:opts {:with-model adult-people}}})
+
+; This makes possible to use different kinds of joins in the model
+; This query will bring all users, and zero or more of their children,
+; but only if that children have dogs (LEFT JOIN, then INNER JOIN dogs):
+(join people :left {:children {:dogs {:opts {:kind :inner}}}})
+
+; Will include fields of associated join in the SELECT clause:
+(join people :left {:children {:opts {:include-fields true}}})
+
+Or, you can use the second way, but please notice that this means
+that you'll have no support from BeeRecord to generate select
+clauses, or to use different kinds of joins. You'll probably need
+to write a bit more too:
+
+(join people :inner :children {:people/id :children/parent-id})
+; OR
+(join people :inner :children [:= :people/id :children/parent-id])
+"
   ([model kind associations] (association-join model kind associations))
   ([model kind foreign-table conditions]
    (let [ft-name (cond-> foreign-table (coll? foreign-table) last)
@@ -264,8 +309,11 @@
 (defn model [{:keys [table pk fields associations queries] :as definition}]
   (let [assoc-queries (->> associations
                            (map #(assoc->query definition %))
-                           (into {}))]
-    (assoc definition
-           :from [table]
-           :select (fields-to definition fields)
-           :queries (merge queries assoc-queries))))
+                           (into {}))
+        new-definition (assoc definition
+                              :translate-table #(str/replace % #"-" "_")
+                              :translate-field #(str/replace % #"-" "_"))]
+    (assoc new-definition
+           :select (fields-to new-definition fields)
+           :queries (merge queries assoc-queries)
+           :from [(keyword ((:translate-table new-definition) (name table)))])))

@@ -17,6 +17,11 @@
            "`users`.`first_name` AS `users/first-name` "
            "FROM `users`")])
 
+(fact "will translate a table"
+  (as-sql (sql/model {:table :my-users :pk :id :fields [:id]}))
+  => [(str "SELECT `my_users`.`id` AS `my-users/id` "
+           "FROM `my_users`")])
+
 (facts "when generating single-table queries"
   (fact "will override SELECT"
     (-> users (sql/select [:name :age]) as-sql)
