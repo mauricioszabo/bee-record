@@ -1,6 +1,8 @@
 (ns bee-record.walker
   (:require [clojure.set :as set]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk])
+  (:require [honeysql.types :refer [#?@(:cljs [SqlCall])]])
+  #?(:clj (:import [honeysql.types SqlCall])))
 
 (defn- table-for [entity]
   (let [from (:from entity)]
@@ -60,7 +62,7 @@
 (defn- field->select [mapping field]
   (let [get-field-part #(if (vector? %) (first %) %)]
     (cond
-      (instance? honeysql.types.SqlCall field)
+      (instance? SqlCall field)
       (update field :args #(field->select mapping %))
 
       (list? field)
@@ -83,26 +85,28 @@
           (entities-and-joins join-tree join-in-tree entity))
       [(conj entities entity) (apply conj joins join-in-tree)])))
 
-(defn- where-fields [{:keys [where]}]
+(defn- all-fields [{:keys [where having group-by order-by]}]
   (->> where
        (tree-seq sequential? not-empty)
        (filter #(and (keyword? %) (namespace %)))))
 
-(defn select-fields [{:keys [select]}]
+(defn select-fields [part]
   (let [child-fn (fn [field]
                    (cond
-                     (instance? honeysql.types.SqlCall field) (:args field)
+                     (instance? SqlCall field) (:args field)
                      (vector? field) (take 1 field)
                      :else field))]
 
-    (->> select
+    (->> part
          seq
          (tree-seq #(and (coll? %) (not-empty %)) child-fn)
          (filter keyword?))))
 
 (defn- prepare-joins [mapping query join-tree]
-  (loop [[prev-field field & rest] (->> (where-fields query)
-                                        (concat (select-fields query))
+  (loop [[prev-field field & rest] (->> (all-fields query)
+                                        (concat (select-fields (:order-by query)))
+                                        (concat (select-fields (:group-by query)))
+                                        (concat (select-fields (:select query)))
                                         (filter #(table-for-entity-field mapping %)))
          entities #{(some-> prev-field namespace keyword)}
          joins []]
@@ -114,7 +118,7 @@
                                       {:field field
                                        :know-entities (-> mapping :entities keys)}))
 
-        (contains? entities entity) (recur rest entities joins)
+        (contains? entities entity) (recur (cons field rest) entities joins)
 
         :else (let [[es js] (entities-and-joins [entities joins]
                                                 join-tree
@@ -147,7 +151,7 @@
             having (prepare-fields mapping having)
             group (prepare-fields mapping group-by)
             order (prepare-fields mapping order-by)
-            first-entity (some->> (select-fields query)
+            first-entity (some->> (select-fields (:select query))
                                   (filter #(table-for-entity-field mapping %))
                                   first
                                   (#(get-in mapping [:entities (-> % namespace keyword)])))

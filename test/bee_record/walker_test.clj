@@ -2,22 +2,6 @@
   (:require [midje.sweet :refer :all]
             [bee-record.walker :as walker]))
 
-(require '[bee-record.walker :as walker]
-         '[honeysql.core :as honey])
-; (def to-honey
-;   (walker/parser-for {:entities {:person {:from [:people]}
-;                                  :child {:from [:children]}}
-;                       :joins {[:person :child] [:= :people.id :children.parent_id]}}))
-;
-; (honey/format
-;  (to-honey {:select [:person/id #sql/call (sum :child/id)]
-;             :group [:people.id]})
-;  :quoting :mysql)
-; {:from [:people]
-;  :select ([:people.name :person/name] [:children.name :child/name])
-;  :join [:children [:= :people.id :children.parent_id]]}
-
-
 (def mapping {:entities {:person {:from [:people]}
                          :pet {:from [:pets]}
                          :record {:from [:medicalrecord]}}
@@ -120,17 +104,16 @@
                                  :from [:common/names]}]]}))
 
 (fact "normalize group-by, order-by, and keep other attributes"
-  (parse {:select [:person/id]
+  (parse {:select [:pet/id]
           :distinct? true
           :group-by [:pet/name]
-          :order-by [:pet/id]})
-  => {:select [[:people.id :person/id]]
+          :order-by [:person/id]})
+  => {:select [[:pets.id :pet/id]]
       :distinct? true
-      :from [:people]
-      :join [:pets [:= :pets.people_id :people.id]]
+      :from [:pets]
+      :join [:people [:= :pets.people_id :people.id]]
       :group-by [:pets.name]
-      :order-by [:pets.id]})
-  ; (honey/format {:group-by [:people.id] :order-by [:foo.id]}))
+      :order-by [:people.id]})
 
 (facts "about non-entity fields"
   (fact "will be ignored on the select clause"
