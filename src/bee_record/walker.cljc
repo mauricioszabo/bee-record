@@ -140,8 +140,10 @@
     (mapv prepare where)))
 
 (defn parser-for [mapping]
+  (prn :WALKER)
   (let [join-tree (create-hierarchy mapping)]
     (fn [query]
+      (prn :Q)
       (def mapping mapping)
       (def join-tree join-tree)
       (def query query)
@@ -164,3 +166,18 @@
                 (not-empty group) (assoc :group-by group)
                 (not-empty order) (assoc :order-by order)
                 (not-empty joins) (assoc :join joins))))))
+
+; ; #_
+; (def m)
+; (create-hierarchy
+;  {:entities {:person {:from [:people]}
+;              :child {:from [[:people :children]]}
+;              :toy {:from [:toys]}
+;              :preferred {:from [[:toys :preferred]]}
+;              :house {:from [:houses]}}
+;   :joins {[:house :person] [:= :people.house_id :houses.id]
+;           [:person :child] [:= :children.parent_id :people.id]
+;           [:child :toy] [:= :children.id :toys.child_id]
+;           [:child :preferred] [:= :children.id :preferred.child_id]}})
+;
+; (clojure.repl/pst)
