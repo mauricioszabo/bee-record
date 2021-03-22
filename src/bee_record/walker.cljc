@@ -1,8 +1,136 @@
 (ns bee-record.walker
   (:require [clojure.set :as set]
-            [clojure.walk :as walk])
+            [clojure.walk :as walk]
+            [clojure.spec.alpha :as s]
+            [com.wsscode.pathom.core :as pathom]
+            [com.wsscode.pathom.connect :as connect]
+            [loom.graph :as graph]
+            [loom.alg :as alg])
   (:require [honeysql.types :refer [#?@(:cljs [SqlCall])]])
   #?(:clj (:import [honeysql.types SqlCall])))
+
+(defn- get-all-tables [query]
+  (let [fields (concat (:select query))
+        tables (map #(-> % namespace keyword) fields)
+        first-table (first tables)]
+    {:first-table first-table
+     :other-tables (-> tables set (disj first-table))}))
+
+(defn- alias-for-table [mapping entity-name]
+  (let [table-like (-> mapping :entities entity-name)]
+    (if (keyword? table-like)
+      (name table-like))))
+
+(defn- norm-graphs [graphs new-graph]
+  (let [graph-set (set new-graph)]
+    (loop [should-add? true
+           [fst & rst] graphs
+           acc []]
+      (let [f-set (set fst)]
+        (cond
+          (and (nil? fst) should-add?) (conj acc new-graph)
+          (nil? fst) acc
+          (set/subset? f-set graph-set) (recur false rst (conj acc new-graph))
+          (set/subset? graph-set f-set) (recur false rst (conj acc fst))
+          :else (recur should-add? rst (conj acc fst)))))))
+
+(defn- make-joins [mapping graph first-table tables]
+  (let [{:keys [g joins]} graph
+        clauses (reduce #(norm-graphs %1 (alg/shortest-path g first-table %2))
+                        []
+                        tables)]
+    (->> clauses
+         distinct
+         (mapcat identity)
+         (partition 2)
+         (mapcat (fn [tables]
+                   [(->> tables second (alias-for-table mapping) keyword)
+                    (get joins (set tables))]))
+         vec)))
+
+(defn parser-for [mapping]
+  (let [graph (reduce (fn [graph [[f1 f2] condition]]
+                        (-> graph
+                            (update :joins assoc (set [f1 f2]) condition)
+                            (update :g graph/add-path f1 f2)))
+                      {:g (graph/graph)}
+                      (:joins mapping))]
+
+    (fn [query]
+      (let [{:keys [first-table other-tables]} (get-all-tables query)]
+        (cond-> {:select (->> query
+                              :select
+                              (mapv #(let [table-from-q (-> % namespace keyword)
+                                           table (alias-for-table mapping table-from-q)
+                                           field (name %)]
+                                       [(keyword (str table "." field))
+                                        %])))
+                 :from [(-> mapping :entities first-table)]}
+
+                (not-empty other-tables) (assoc :join (make-joins mapping
+                                                                  graph
+                                                                  first-table
+                                                                  other-tables)))))))
+
+(def lol {::connect/sym 'bee-record.walker/foo
+          ::connect/resolve (fn [a b]
+                              {:foo/bar 20})
+          ::connect/input #{}
+          ::connect/output [:foo/bar]})
+(connect/defresolver foo
+  [foo bar]
+  {::connect/input #{}
+   ::connect/output [:foo/bar]}
+  {:foo/bar 10})
+
+; (def x (atom 0))
+; (repeatedly 20
+;  (fn [] (future (swap! x inc)))) ;put atom in multiple threads with future
+; (deref x)
+;
+; (dotimes [i 10] (.start (Thread. (fn [] (println i)))))
+;
+; (println "FOá")
+;
+; (let [p (gen-parser lol)]
+;   (p {} [:foo/bar]))
+;
+(defn- gen-parser [resolvers]
+  (pathom/parser
+    {::pathom/env {::pathom/reader [pathom/map-reader
+                                    connect/reader2
+                                    connect/open-ident-reader
+                                    pathom/env-placeholder-reader]
+                   ::pathom/placeholder-prefixes #{">"}}
+     ::pathom/mutate connect/mutate
+     ::pathom/plugins [(connect/connect-plugin {::connect/register resolvers})
+                       pathom/error-handler-plugin
+                       pathom/trace-plugin]}))
+
+(defn- get-query-db [])
+
+(defn- make-query-fn [eql query]
+  (let [{:keys [find where]} query
+        first-field (or (first find)
+                        (throw (ex-info "At least one field must be present on :find" {})))]
+    ,,,,
+    []))
+
+(defn parser-for' [mapping]
+  (let [{:keys [entities joins]} mapping]
+    ()))
+
+(s/def ::entities (s/map-of keyword? map?))
+(s/def ::joins (s/map-of set? coll?))
+;                 :joins {#{:person :pet} [:= :pets.people_id :people.id]
+;                       #{:pet :record} [:= :pets.id :medicalrecord.pet_id]}})
+; )
+(s/conform ::joins {#{:foo :bar} []})
+(s/def ::mapping (s/keys :req-un [::entities ::joins]))
+#_
+(s/conform ::entities {:person {:from [:people]}
+                         :pet "pet"
+                         :record {:from [:medicalrecord]}})
 
 (defn- table-for [entity]
   (let [from (:from entity)]
@@ -139,6 +267,7 @@
                     (field->where-field mapping field)))]
     (mapv prepare where)))
 
+#_
 (defn parser-for [mapping]
   (prn :WALKER)
   (let [join-tree (create-hierarchy mapping)]

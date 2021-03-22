@@ -1,59 +1,33 @@
 (ns bee-record.walker-test
   (:require [clojure.test :refer [deftest testing is]]
+            [check.core :refer [check]]
             [bee-record.walker :as walker]
             [matcher-combinators.test]
             [matcher-combinators.matchers :refer [in-any-order]]))
 
-(def mapping {:entities {:person {:from [:people]}
-                         :pet {:from [:pets]}
-                         :record {:from [:medicalrecord]}}
+(def mapping {:entities {:person :people
+                         :pet :pets
+                         :record :medicalrecord}
               :joins {[:person :pet] [:= :pets.people_id :people.id]
                       [:pet :record] [:= :pets.id :medicalrecord.pet_id]}})
 
+(def q (walker/parser-for mapping))
+
+(deftest basic-queries
+  (check (q {:select [:person/id :person/name]})
+         => {:select [[:people.id :person/id] [:people.name :person/name]]
+             :from [:people]}))
+
 (def parse (walker/parser-for mapping))
 
-(deftest join-map
-  (testing "generation a 'direct' graph"
-    (is (match? {:person {:pet [:pets [:= :people.id :pets.person_id]]}
-                 :pet {:person [:people [:= :people.id :pets.person_id]]}}
-                (#'walker/create-hierarchy {:entities {:person {:from [:people]} :pet {:from [:pets]}}
-                                            :joins {[:person :pet] [:= :people.id :pets.person_id]}}))))
-
-  (testing "generation of intermediate indexes"
-    (is (match? {:person {:pet [:pets [:= :people.id :pets.person_id]]
-                          :medic :diag
-                          :diag :pet}
-                 :pet {:person [:people [:= :people.id :pets.person_id]]
-                       :diag [:diags [:= :pets.id :diags.pet_id]]
-                       :medic :diag}
-                 :diag {:medic [:medics [:= :diag.medic_id :medics.id]]
-                        :pet [:pets [:= :pets.id :diags.pet_id]]
-                        :person :pet}
-                 :medic {:diag [:diags [:= :diag.medic_id :medics.id]]
-                         :pet :diag
-                         :person :pet}}
-                (#'walker/create-hierarchy {:entities {:person {:from [:people]}
-                                                       :pet {:from [:pets]}
-                                                       :diag {:from [:diags]}
-                                                       :medic {:from [:medics]}}
-                                            :joins {[:person :pet] [:= :people.id :pets.person_id]
-                                                    [:pet :diag] [:= :pets.id :diags.pet_id]
-                                                    [:diag :medic] [:= :diag.medic_id :medics.id]}})))))
-
 (deftest generation-of-a-honey-query
-  (testing "will generate a select without from if not entity is found"
-    (is (match? {:select ["foo"]} (parse {:select ["foo"]}))))
-
-  (testing "FROM clause"
-    (is (match? {:select [[:people.id :person/id] [:people.name :person/name]]
-                 :from [:people]}
-                (parse {:select [:person/id :person/name]}))))
-
   (testing "generation of a query with a direct join"
-    (is (match? {:select [[:people.name :person/name] [:pets.color :pet/color] [:pets.race :pet/race]]
-                 :from [:people]
-                 :join [:pets [:= :pets.people_id :people.id]]}
-                (parse {:select [:person/name :pet/color :pet/race]}))))
+    (check (parse {:select [:person/name :pet/color :pet/race]})
+           => {:select [[:people.name :person/name]
+                        [:pets.color :pet/color]
+                        [:pets.race :pet/race]]
+               :from [:people]
+               :join [:pets [:= :pets.people_id :people.id]]}))
 
   (testing "generation of a query with indirect joins"
     (is (match? {:select [[:people.name :person/name] [:medicalrecord.sickness :record/sickness]]
