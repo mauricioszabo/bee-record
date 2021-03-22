@@ -39,7 +39,19 @@
   (testing "will normalize fields on sql functions"
     (check (parse {:select [#sql/call (count :person/id)]})
            => {:select [#sql/call (count :people.id)]
-               :from [:people]})))
+               :from [:people]}))
+
+  (testing "will normalize group, order, and having"
+    (check (parse {:select [:pet/id]
+                   :distinct? true
+                   :group-by [:pet/name]
+                   :order-by [:person/id]})
+           => {:select [[:pets.id :pet/id]]
+               :distinct? true
+               :from [:pets]
+               :join [:people [:= :pets.people_id :people.id]]
+               :group-by [:pets.name]
+               :order-by [:people.id]})))
 
 (deftest generation-of-queries-with-filters
   (testing "adding joins when filtering for fields on another entity"

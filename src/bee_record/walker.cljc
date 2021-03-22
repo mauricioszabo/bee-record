@@ -24,7 +24,10 @@
 (defn- get-all-tables [query]
   (let [deep-flatten #(->> % (tree-seq coll? seq) (filter walker-alias?))
         fields (concat (-> query :select deep-flatten)
-                       (->> query :where deep-flatten))
+                       (-> query :where deep-flatten)
+                       (-> query :having deep-flatten)
+                       (-> query :group-by deep-flatten)
+                       (-> query :order-by deep-flatten))
         tables (->> fields
                     (mapcat #(some-> %  walker-alias? keyword vector)))
         first-table (first tables)]
@@ -46,7 +49,6 @@
            [fst & rst] graphs
            acc []]
       (let [f-set (set fst)]
-        (prn :F-SET f-set :GRAPH graph-set :ADD? should-add?)
         (cond
           (and (nil? fst) should-add?) (conj acc new-graph)
           (nil? fst) acc
@@ -118,20 +120,22 @@
                 elem))
             wheres))
 
+(defn- norm-field [mapping field]
+  (if-let [table-from-q (walker-alias? field)]
+    (let [table (alias-for-attribute mapping (keyword table-from-q))
+          field (name field)]
+      (keyword (str table "." field)))
+    field))
+
 (defn- norm-select [mapping select]
   (let [norm-attr #(if-let [table-from-q (walker-alias? %)]
                      (let [table (alias-for-attribute mapping (keyword table-from-q))
                            field (name %)]
                        [(keyword (str table "." field)) %])
                      %)
-        norm-field #(if-let [table-from-q (walker-alias? %)]
-                      (let [table (alias-for-attribute mapping (keyword table-from-q))
-                            field (name %)]
-                        (keyword (str table "." field)))
-                      %)]
+        norm-field #(norm-field mapping %)]
     (mapv #(if (keyword? %) (norm-attr %) (postwalk norm-field %))
           select)))
-
 
 (defn parser-for [mapping]
   (s/assert* ::mapping mapping)
@@ -144,14 +148,24 @@
 
     (fn [query]
       (let [{:keys [first-table other-tables]} (get-all-tables query)]
-        (cond-> {:select (->> query :select (norm-select mapping))
-                 :from [(-> mapping :entities first-table)]}
+        (cond-> (assoc query
+                       {:select (->> query :select (norm-select mapping))
+                        :from [(-> mapping :entities first-table)]})
 
                 (not-empty other-tables)
                 (assoc :join (make-joins mapping graph first-table other-tables))
 
                 (:where query)
-                (assoc :where (norm-where mapping (:where query))))))))
+                (assoc :where (norm-where mapping (:where query)))
+
+                (:having query)
+                (assoc :having (norm-where mapping (:having query)))
+
+                (:group-by query)
+                (assoc :group-by (postwalk #(norm-field mapping %) (:group-by query)))
+
+                (:order-by query)
+                (assoc :order-by (postwalk #(norm-field mapping %) (:order-by query))))))))
 
 ; (def lol {::connect/sym 'bee-record.walker/foo
 ;           ::connect/resolve (fn [a b]
@@ -390,4 +404,5 @@
 ; ;           [:child :toy] [:= :children.id :toys.child_id]
 ; ;           [:child :preferred] [:= :children.id :preferred.child_id]}})
 ; ;
+; ; (clojure.repl/pst)
 ; ; (clojure.repl/pst)
