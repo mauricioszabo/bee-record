@@ -22,8 +22,9 @@
   (and (keyword? elem) (namespace elem)))
 
 (defn- get-all-tables [query]
-  (let [fields (concat (:select query)
-                       (->> query :where flatten (filter walker-alias?)))
+  (let [deep-flatten #(->> % (tree-seq coll? seq) (filter walker-alias?))
+        fields (concat (-> query :select deep-flatten)
+                       (->> query :where deep-flatten))
         tables (->> fields
                     (mapcat #(some-> %  walker-alias? keyword vector)))
         first-table (first tables)]
@@ -118,12 +119,18 @@
             wheres))
 
 (defn- norm-select [mapping select]
-  (mapv #(if-let [table-from-q (walker-alias? %)]
-           (let [table (alias-for-attribute mapping (keyword table-from-q))
-                 field (name %)]
-             [(keyword (str table "." field)) %])
-           %)
-        select))
+  (let [norm-attr #(if-let [table-from-q (walker-alias? %)]
+                     (let [table (alias-for-attribute mapping (keyword table-from-q))
+                           field (name %)]
+                       [(keyword (str table "." field)) %])
+                     %)
+        norm-field #(if-let [table-from-q (walker-alias? %)]
+                      (let [table (alias-for-attribute mapping (keyword table-from-q))
+                            field (name %)]
+                        (keyword (str table "." field)))
+                      %)]
+    (mapv #(if (keyword? %) (norm-attr %) (postwalk norm-field %))
+          select)))
 
 
 (defn parser-for [mapping]
